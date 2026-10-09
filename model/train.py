@@ -69,6 +69,7 @@ def main():
     model = build_model(args.model).to(device)
     criterion = nn.CrossEntropyLoss(weight=weights)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
     scaler = torch.amp.GradScaler("cuda", enabled=(device == "cuda"))
 
     Path("model/checkpoints").mkdir(parents=True, exist_ok=True)
@@ -82,6 +83,7 @@ def main():
               f"| val loss {va_loss:.3f} acc {va_acc:.3f} macroF1 {va_f1:.3f}")
         print("  val recall per class:",
               {c: round(float(r), 3) for c, r in zip(CLASSES, va_rec)})
+        scheduler.step()
         if va_f1 > best_f1:
             best_f1 = va_f1
             torch.save(model.state_dict(), f"model/checkpoints/{args.model}_best.pt")
