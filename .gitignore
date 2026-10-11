@@ -4,3 +4,6 @@ data/
 *.pth
 __pycache__/
 .ipynb_checkpoints/
+
+app/cases.db
+app/storage/
