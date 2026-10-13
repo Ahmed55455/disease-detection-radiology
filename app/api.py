@@ -85,9 +85,17 @@ async def analyze_image(file: UploadFile = File(...),
 
 
 @app.get("/cases")
-def list_cases(include_done: bool = False):
-    """Worklist: highest urgency first, ties by upload time."""
-    return [_public(c) for c in db.get_worklist(include_done=include_done)]
+def list_cases(include_done: bool = False,
+               order: str = Query("ai", pattern="^(ai|fifo)$",
+                                  description="ai = urgency first, fifo = arrival order")):
+    """Worklist in AI priority order (default) or FIFO order."""
+    return [_public(c) for c in db.get_worklist(include_done=include_done, order=order)]
+
+
+@app.get("/compare")
+def compare(include_done: bool = False):
+    """Position of each case in FIFO vs AI order (moved_up > 0 = read earlier with AI)."""
+    return db.compare_orders(include_done=include_done)
 
 
 @app.get("/cases/{case_id}")

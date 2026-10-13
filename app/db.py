@@ -86,9 +86,10 @@ def urgency_score(probs):
     return round(float(sum(p * SEVERITY.get(c, 0.0) for c, p in probs.items())), 4)
 
 
-def save_case(image, res):
-    """image: PIL.Image. res: output of inference.analyze(). Returns the new case_id."""
-    uploaded_at = now_iso()
+def save_case(image, res, uploaded_at=None):
+    """image: PIL.Image. res: output of inference.analyze(). Returns the new case_id.
+    uploaded_at: ISO 8601 text; default is now (the seed script sets past times)."""
+    uploaded_at = uploaded_at or now_iso()
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     img_path = STORAGE / f"{stamp}_image.png"
     hm_path = STORAGE / f"{stamp}_heatmap.png"
@@ -116,12 +117,37 @@ def get_case(case_id):
         return dict(r) if r else None
 
 
-def get_worklist(include_done=False):
-    """Cases ordered by urgency (highest first), ties by upload time (oldest first)."""
+ORDERS = {
+    # AI priority: highest urgency first, ties by upload time (oldest first)
+    "ai": "urgency_score DESC, uploaded_at ASC, case_id ASC",
+    # FIFO baseline: first come, first served
+    "fifo": "uploaded_at ASC, case_id ASC",
+}
+
+
+def get_worklist(include_done=False, order="ai"):
+    """order='ai' (urgency) or 'fifo' (arrival time)."""
+    if order not in ORDERS:
+        raise ValueError(f"Unknown order: {order}. Use 'ai' or 'fifo'.")
     where = "" if include_done else "WHERE status != 'done'"
     with closing(_conn()) as c:
         return [dict(r) for r in c.execute(
-            f"SELECT * FROM cases {where} ORDER BY urgency_score DESC, uploaded_at ASC")]
+            f"SELECT * FROM cases {where} ORDER BY {ORDERS[order]}")]
+
+
+def compare_orders(include_done=False):
+    """Position of each case in FIFO and in AI order (1 = read first).
+    moved_up > 0 means the AI order reads this case earlier than FIFO."""
+    fifo = get_worklist(include_done, "fifo")
+    ai_pos = {r["case_id"]: i for i, r in enumerate(get_worklist(include_done, "ai"), 1)}
+    out = []
+    for i, r in enumerate(fifo, 1):
+        out.append({"case_id": r["case_id"], "uploaded_at": r["uploaded_at"],
+                    "predicted_class": r["predicted_class"],
+                    "urgency_score": r["urgency_score"], "status": r["status"],
+                    "fifo_position": i, "ai_position": ai_pos[r["case_id"]],
+                    "moved_up": i - ai_pos[r["case_id"]]})
+    return sorted(out, key=lambda x: x["ai_position"])
 
 
 def set_status(case_id, new_status, radiologist_label=None):
@@ -166,6 +192,15 @@ def recompute_urgency():
             c.execute("UPDATE cases SET urgency_score=? WHERE case_id=?",
                       (urgency_score(probs), r["case_id"]))
         return len(rows)
+
+
+def reset_all():
+    """Delete every case and stored image. Used only by the demo seed script."""
+    with closing(_conn()) as c, c:
+        c.execute("DELETE FROM cases")
+        c.execute("DELETE FROM sqlite_sequence WHERE name='cases'")
+    for f in STORAGE.glob("*.png"):
+        f.unlink()
 
 
 def export_csv(path=None):

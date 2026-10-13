@@ -19,6 +19,12 @@ st.warning(
     "It is limited by its training data and is not a medical diagnosis."
 )
 
+def highlight_critical(row):
+    """Red background for rows the AI predicts as COVID (highest severity)."""
+    style = "background-color: rgba(220, 53, 69, 0.18)" if row["predicted_class"] == "COVID" else ""
+    return [style] * len(row)
+
+
 page = st.sidebar.radio("Page", ["Upload & Analyze", "Worklist", "Export"])
 
 # ---------------------------------------------------------------- Upload
@@ -65,15 +71,38 @@ if page == "Upload & Analyze":
 
 # ---------------------------------------------------------------- Worklist
 elif page == "Worklist":
-    st.header("Radiologist Worklist (highest urgency first)")
+    st.header("Radiologist Worklist")
+    view = st.radio("Reading order", ["AI priority", "FIFO (arrival order)", "Compare FIFO vs AI"],
+                    horizontal=True)
     show_done = st.checkbox("Show done cases")
-    rows = db.get_worklist(include_done=show_done)
+    rows = db.get_worklist(include_done=show_done,
+                           order="fifo" if view.startswith("FIFO") else "ai")
     if not rows:
         st.info("No cases.")
     else:
-        df = pd.DataFrame(rows)[["case_id", "uploaded_at", "predicted_class", "confidence",
-                                 "urgency_score", "status", "radiologist_label", "read_at"]]
-        st.dataframe(df, hide_index=True)
+        if view == "Compare FIFO vs AI":
+            st.info("Visual illustration of the reading order only. "
+                    "Waiting-time results come from the simulation study.")
+            st.caption("Position 1 is read first. 'moved_up' = how many places earlier "
+                       "the AI order reads the case compared with FIFO.")
+            df = pd.DataFrame(db.compare_orders(include_done=show_done))
+            st.dataframe(df.style.apply(highlight_critical, axis=1), hide_index=True)
+            crit = df[df["predicted_class"] == "COVID"]
+            if len(crit):
+                a, b = st.columns(2)
+                a.metric("COVID cases: average position (FIFO)",
+                         f"{crit['fifo_position'].mean():.1f}")
+                b.metric("COVID cases: average position (AI)",
+                         f"{crit['ai_position'].mean():.1f}",
+                         delta=f"{crit['ai_position'].mean() - crit['fifo_position'].mean():.1f}",
+                         delta_color="inverse")
+        else:
+            df = pd.DataFrame(rows)[["case_id", "uploaded_at", "predicted_class",
+                                     "confidence", "urgency_score", "status",
+                                     "radiologist_label", "read_at"]]
+            df.insert(0, "position", range(1, len(df) + 1))
+            st.dataframe(df.style.apply(highlight_critical, axis=1), hide_index=True)
+        st.caption("Red rows: AI predicts COVID (most urgent class). The radiologist decides.")
 
         case_id = st.selectbox("Case", df["case_id"])
         row = db.get_case(int(case_id))

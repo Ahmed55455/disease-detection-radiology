@@ -60,6 +60,15 @@ def main():
     assert ids.index(b) < ids.index(c)
     print("OK  tie broken by uploaded_at")
 
+    # 3b) FIFO order and FIFO vs AI comparison
+    fifo = [r["case_id"] for r in db.get_worklist(order="fifo")]
+    assert fifo == [a, b, c]
+    cmp = {r["case_id"]: r for r in db.compare_orders()}
+    assert cmp[b]["fifo_position"] == 2 and cmp[b]["ai_position"] == 1 and cmp[b]["moved_up"] == 1
+    assert cmp[a]["moved_up"] == -2
+    expect_error(db.get_worklist, False, "random")
+    print("OK  FIFO order and compare_orders")
+
     # 4) ISO 8601 time with timezone
     up = db.get_case(a)["uploaded_at"]
     assert "T" in up and ("+" in up or up.endswith("Z") or "-" in up[19:])

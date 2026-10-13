@@ -12,6 +12,8 @@ The system assists radiologists and does not replace them. It is limited by its 
 | `test_db.py` | Tests for `db.py` and the upload checks (no PyTorch needed) |
 | `api.py` | REST API (FastAPI) using the same `inference.py` and `db.py` |
 | `test_api.py` | Tests for the API with a fake model (no checkpoint needed) |
+| `seed_demo.py` | Fills the worklist with real test images for a demo |
+| `pick_test_images.py` | Copies a few TEST-set images from the Kaggle dataset into a demo folder |
 
 `app.py` never talks to SQLite or PyTorch directly, so a FastAPI API can reuse
 `inference.py` and `db.py` later without rewriting them.
@@ -33,7 +35,11 @@ python app/test_db.py         # runs the tests
 
 ## Worklist
 
-- Order: `urgency_score` descending, ties by `uploaded_at` ascending (oldest first).
+- AI order (default): `urgency_score` descending, ties by `uploaded_at` ascending (oldest first).
+- FIFO order (baseline): `uploaded_at` ascending.
+- The Worklist page has a **Reading order** switch: AI priority, FIFO, or **Compare FIFO vs AI**,
+  which shows each case's position in both orders and the average position of COVID cases.
+  `db.compare_orders()` returns the same table.
 - Status flow: `pending -> in_review -> done` (a case in review can go back to `pending`).
 - `done` requires the radiologist label (one of the 4 classes) and sets `read_at`.
 - Times are ISO 8601 with timezone, for example `2026-10-13T21:30:05+03:00`.
@@ -74,7 +80,8 @@ Open http://127.0.0.1:8000/docs to try every endpoint in the browser.
 |---|---|---|
 | GET | `/health` | Check that the API is running |
 | POST | `/analyze?save=true` | Upload an image (form field `file`), get the prediction, add it to the worklist |
-| GET | `/cases?include_done=false` | Worklist, highest urgency first |
+| GET | `/cases?include_done=false&order=ai` | Worklist, `order=ai` (urgency) or `order=fifo` |
+| GET | `/compare` | Position of each case in FIFO vs AI order |
 | GET | `/cases/{id}` | One case |
 | GET | `/cases/{id}/image`, `/cases/{id}/heatmap` | Stored images (PNG) |
 | POST | `/cases/{id}/start_review` | `pending -> in_review` |
@@ -84,6 +91,22 @@ Open http://127.0.0.1:8000/docs to try every endpoint in the browser.
 
 Errors: `400` bad upload, `404` unknown case, `409` status move not allowed, `500` model error.
 The API and the Streamlit app share the same `cases.db`.
+
+## Demo data
+
+Get test images (only images from the test split, using the test predictions CSV from Drive):
+```powershell
+python app/pick_test_images.py --csv "<efficientnet_b0_test_probs.csv>" --dataset "<COVID-19_Radiography_Dataset>" --out "<demo_images>" --per-class 5
+```
+Then fill the worklist:
+
+```powershell
+python app/seed_demo.py "C:\path\to\demo_images" --n 20 --minutes 3 --reset
+```
+Analyzes each image with the real model and adds it with spread-out arrival times in random
+order, so FIFO and AI orders differ. Sub-folders named after the classes let the script print
+the true class next to the prediction. Use test-set images only. `--reset` deletes all cases
+first (asks for confirmation).
 
 ## Privacy
 

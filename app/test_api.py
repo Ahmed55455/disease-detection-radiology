@@ -57,7 +57,10 @@ def main():
     assert client.get(f"/cases/{case_id}/image").status_code == 200
     assert client.get(f"/cases/{case_id}/heatmap").status_code == 200
     assert client.get("/cases/9999").status_code == 404
-    print("OK  /cases, images, 404")
+    assert client.get("/cases", params={"order": "fifo"}).status_code == 200
+    assert client.get("/cases", params={"order": "bad"}).status_code == 422
+    assert client.get("/compare").json()[0]["ai_position"] == 1
+    print("OK  /cases, order, /compare, images, 404")
 
     assert client.post(f"/cases/{case_id}/done", json={}).status_code == 409   # must review first
     assert client.post(f"/cases/{case_id}/start_review").json()["status"] == "in_review"
