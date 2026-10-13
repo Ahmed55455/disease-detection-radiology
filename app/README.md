@@ -10,6 +10,8 @@ The system assists radiologists and does not replace them. It is limited by its 
 | `inference.py` | Checks the uploaded file, then calls `predict()` from `model/predict.py` |
 | `db.py` | SQLite database: save cases, worklist order, status flow, urgency rule, CSV export |
 | `test_db.py` | Tests for `db.py` and the upload checks (no PyTorch needed) |
+| `api.py` | REST API (FastAPI) using the same `inference.py` and `db.py` |
+| `test_api.py` | Tests for the API with a fake model (no checkpoint needed) |
 
 `app.py` never talks to SQLite or PyTorch directly, so a FastAPI API can reuse
 `inference.py` and `db.py` later without rewriting them.
@@ -57,6 +59,31 @@ p_lung_opacity, p_normal, p_viral_pneumonia, confidence, urgency_score, status,
 radiologist_label, model_name, review_started_at`.
 `model_name` and `review_started_at` were added in week 3; older `cases.db` files are
 upgraded automatically.
+
+## REST API (FastAPI)
+
+```powershell
+pip install fastapi uvicorn python-multipart httpx
+uvicorn app.api:app --reload        # from the repository root
+python app/test_api.py              # API tests
+```
+
+Open http://127.0.0.1:8000/docs to try every endpoint in the browser.
+
+| Method | Path | What it does |
+|---|---|---|
+| GET | `/health` | Check that the API is running |
+| POST | `/analyze?save=true` | Upload an image (form field `file`), get the prediction, add it to the worklist |
+| GET | `/cases?include_done=false` | Worklist, highest urgency first |
+| GET | `/cases/{id}` | One case |
+| GET | `/cases/{id}/image`, `/cases/{id}/heatmap` | Stored images (PNG) |
+| POST | `/cases/{id}/start_review` | `pending -> in_review` |
+| POST | `/cases/{id}/release` | `in_review -> pending` |
+| POST | `/cases/{id}/done` | `in_review -> done`, body `{"radiologist_label": "COVID"}` |
+| GET | `/export.csv` | CSV for the simulation |
+
+Errors: `400` bad upload, `404` unknown case, `409` status move not allowed, `500` model error.
+The API and the Streamlit app share the same `cases.db`.
 
 ## Privacy
 
