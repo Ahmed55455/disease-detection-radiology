@@ -18,9 +18,9 @@ Download "COVID-19 Radiography Database" from Kaggle (tawsifurrahman) and extrac
 
 ## Pipeline (run from the repo root)
 ```bash
-python model/eda.py
-python model/check_duplicates.py
-python model/split_data.py
+python model/prep/eda.py
+python model/prep/check_duplicates.py
+python model/prep/split_data.py
 python model/train.py --model efficientnet_b0 --epochs 8 --batch 16
 python model/evaluate.py
 python model/predict.py
