@@ -52,6 +52,21 @@ Recall per class:
 - Lung_Opacity is the weakest class for all models. Viral Pneumonia has only 201 test images, so its metrics are less stable.
 - These numbers are probably not representative of new hospitals (see sections 5 and 6).
 
+## 3b. Variability across training seeds
+
+Each model was trained 3 times with the same settings (seed 42 from the original run, plus seeds 1 and 2). Mean +- standard deviation over the 3 runs (the standard deviation of 3 runs is only a rough estimate):
+
+| Model | Test accuracy | Test macro-F1 | External clean sensitivity | External clean specificity |
+|---|---|---|---|---|
+| EfficientNet-B0 | 0.958 +- 0.003 | 0.966 +- 0.002 | 0.989 +- 0.005 | 0.587 +- 0.054 |
+| ResNet50 | 0.960 +- 0.001 | 0.970 +- 0.001 | 0.995 +- 0.003 | 0.559 +- 0.109 |
+| DenseNet121 | 0.961 +- 0.001 | 0.970 +- 0.001 | 0.989 +- 0.008 | 0.551 +- 0.109 |
+
+- Test accuracy differs by at most 0.3 points between models. EfficientNet-B0's macro-F1 was lower than ResNet50's and DenseNet121's in every run (0.964 to 0.968 vs 0.969 to 0.971), about 0.4 points on average; this is small and based on 3 runs per model.
+- Specificity on the clean external set varies a lot between runs of the same model (EfficientNet-B0 0.533 to 0.640, ResNet50 0.434 to 0.632, DenseNet121 0.455 to 0.669), more than the differences between model means. The model ranking on external specificity in section 5 (one run each) is therefore not reliable. Sensitivity is stable (0.98 to 0.998).
+- Test was evaluated once per run and never used to choose a checkpoint (the best epoch is chosen on validation).
+- Seed 42 results come from the original training script, the other two from `model/experiments/train_seeds.py` with the same settings. GPU non-determinism was not controlled.
+
 ## 4. Explainability (Grad-CAM) and input robustness
 
 - Grad-CAM (EfficientNet-B0, last feature layer, 7x7 map upsampled) is approximate, not pixel-accurate.
