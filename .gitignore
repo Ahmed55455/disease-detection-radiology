@@ -7,3 +7,4 @@ __pycache__/
 
 app/cases.db
 app/storage/
+demo_images/
