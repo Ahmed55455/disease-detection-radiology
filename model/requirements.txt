@@ -1,0 +1,13 @@
+# Model part (training, evaluation, predict). Python 3.11.
+# Install PyTorch first (GPU, CUDA 12.1):
+#   pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu121
+# Then:
+#   pip install -r model/requirements.txt
+
+numpy==2.4.6
+pandas==3.0.6
+pillow==12.3.0
+scikit-learn==1.9.1
+matplotlib==3.11.2
+grad-cam==1.5.7
+tqdm==4.70.1
