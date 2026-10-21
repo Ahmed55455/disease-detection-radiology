@@ -6,7 +6,7 @@ The system assists radiologists and does not replace them. It is limited by its 
 
 | File | Role |
 |---|---|
-| `app.py` | Streamlit user interface only (pages: Upload & Analyze, Worklist, Export) |
+| `app.py` | Streamlit user interface only (pages: Dashboard, Upload & Analyze, Worklist, Export) |
 | `inference.py` | Checks the uploaded file, then calls `predict()` from `model/predict.py` |
 | `db.py` | SQLite database: save cases, worklist order, status flow, urgency rule, CSV export |
 | `test_db.py` | Tests for `db.py` and the upload checks (no PyTorch needed) |
