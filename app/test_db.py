@@ -8,6 +8,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from contextlib import closing
+
 import numpy as np
 from PIL import Image
 
@@ -69,6 +71,19 @@ def main():
     expect_error(db.get_worklist, False, "random")
     print("OK  FIFO order and compare_orders")
 
+    # 3c) Warnings are stored, and do NOT change the priority
+    flagged = fake_result("COVID", covid)
+    flagged["warnings"] = ["Image is colored.", "Second warning."]
+    d = db.save_case(img, flagged)
+    assert db.warnings_list(db.get_case(d)) == ["Image is colored.", "Second warning."]
+    assert db.warnings_list(db.get_case(a)) == []
+    assert db.get_case(d)["model_name"] == "test"
+    ids = [r["case_id"] for r in db.get_worklist()]
+    assert ids.index(c) < ids.index(d) < ids.index(a)    # same place as an unflagged COVID case
+    with closing(db._conn()) as con, con:
+        con.execute("DELETE FROM cases WHERE case_id=?", (d,))
+    print("OK  warnings stored, priority unchanged")
+
     # 4) ISO 8601 time with timezone
     up = db.get_case(a)["uploaded_at"]
     assert "T" in up and ("+" in up or up.endswith("Z") or "-" in up[19:])
@@ -90,6 +105,7 @@ def main():
     # 6) CSV export for Member 3
     lines = db.export_csv(tmp / "worklist.csv").strip().splitlines()
     assert lines[0] == ",".join(db.EXPORT_COLUMNS)
+    assert "review_started_at" in lines[0]
     assert len(lines) == 1 + 3                  # header + all 3 cases (done included)
     print("OK  export_csv:", lines[0])
 

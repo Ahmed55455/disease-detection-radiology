@@ -53,6 +53,7 @@ def main():
     print("OK  /analyze rejects a wrong file type")
 
     cases = client.get("/cases").json()
+    assert cases[0]["warnings"] == [] and cases[0]["model_name"] == "fake"
     assert cases[0]["case_id"] == case_id and "image_path" not in cases[0]
     assert client.get(f"/cases/{case_id}/image").status_code == 200
     assert client.get(f"/cases/{case_id}/heatmap").status_code == 200

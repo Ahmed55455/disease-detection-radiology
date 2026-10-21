@@ -97,12 +97,15 @@ elif page == "Worklist":
                          delta=f"{crit['ai_position'].mean() - crit['fifo_position'].mean():.1f}",
                          delta_color="inverse")
         else:
-            df = pd.DataFrame(rows)[["case_id", "uploaded_at", "predicted_class",
-                                     "confidence", "urgency_score", "status",
-                                     "radiologist_label", "read_at"]]
+            df = pd.DataFrame(rows)
+            df["flag"] = df["warnings"].apply(lambda w: "⚠️" if w else "")
+            df = df[["case_id", "flag", "uploaded_at", "predicted_class",
+                     "confidence", "urgency_score", "status",
+                     "radiologist_label", "read_at"]]
             df.insert(0, "position", range(1, len(df) + 1))
             st.dataframe(df.style.apply(highlight_critical, axis=1), hide_index=True)
-        st.caption("Red rows: AI predicts COVID (most urgent class). The radiologist decides.")
+        st.caption("Red rows: AI predicts COVID (most urgent class). ⚠️ = image check warning "
+                   "(priority is NOT changed). The radiologist decides.")
 
         case_id = st.selectbox("Case", df["case_id"])
         row = db.get_case(int(case_id))
@@ -110,7 +113,9 @@ elif page == "Worklist":
         c1.image(row["image_path"], caption="Original", width=400)
         c2.image(row["heatmap_path"], caption="Grad-CAM heatmap (approximate)", width=400)
         st.write(f"**Status:** {row['status']}  |  **AI prediction:** {row['predicted_class']}"
-                 f" ({row['confidence']:.1%})")
+                 f" ({row['confidence']:.1%})  |  **Model:** {row['model_name'] or 'unknown'}")
+        for w in db.warnings_list(row):
+            st.warning(f"⚠️ Image check: {w} The case keeps its priority; please check the image.")
 
         try:
             if row["status"] == "pending":

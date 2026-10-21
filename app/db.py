@@ -36,8 +36,10 @@ ALLOWED_MOVES = {               # status flow: pending -> in_review -> done
     "done": set(),
 }
 
-EXPORT_COLUMNS = ["case_id", "uploaded_at", "read_at", "predicted_class",
-                  "urgency_score", "status"]
+EXPORT_COLUMNS = ["case_id", "uploaded_at", "review_started_at", "read_at",
+                  "predicted_class", "urgency_score", "status"]
+
+WARNING_SEP = "; "   # warnings from predict() are stored as one text, joined by this
 
 
 def configure(db_path=None, storage=None):
@@ -72,11 +74,11 @@ def init_db():
                 p_covid REAL, p_lung_opacity REAL, p_normal REAL, p_viral_pneumonia REAL,
                 confidence REAL, urgency_score REAL,
                 status TEXT DEFAULT 'pending', radiologist_label TEXT,
-                model_name TEXT, review_started_at TEXT
+                model_name TEXT, review_started_at TEXT, warnings TEXT
             )""")
         # Older cases.db files (week 1-2) do not have the new columns: add them.
         existing = {r["name"] for r in c.execute("PRAGMA table_info(cases)")}
-        for col in ("model_name", "review_started_at"):
+        for col in ("model_name", "review_started_at", "warnings"):
             if col not in existing:
                 c.execute(f"ALTER TABLE cases ADD COLUMN {col} TEXT")
 
@@ -101,14 +103,20 @@ def save_case(image, res, uploaded_at=None):
         cur = c.execute(
             """INSERT INTO cases (image_path, heatmap_path, uploaded_at, predicted_class,
                p_covid, p_lung_opacity, p_normal, p_viral_pneumonia,
-               confidence, urgency_score, status, model_name)
-               VALUES (?,?,?,?,?,?,?,?,?,?,'pending',?)""",
+               confidence, urgency_score, status, model_name, warnings)
+               VALUES (?,?,?,?,?,?,?,?,?,?,'pending',?,?)""",
             (str(img_path), str(hm_path), uploaded_at, res["class"],
              p["COVID"], p["Lung_Opacity"], p["Normal"], p["Viral Pneumonia"],
              res.get("confidence", p[res["class"]]), urgency_score(p),
-             res.get("model_name")),
+             res.get("model_name"), WARNING_SEP.join(res.get("warnings") or [])),
         )
         return cur.lastrowid
+
+
+def warnings_list(case):
+    """Warnings of a stored case as a list (empty list if none)."""
+    text = case.get("warnings") or ""
+    return [w for w in text.split(WARNING_SEP) if w]
 
 
 def get_case(case_id):
@@ -142,7 +150,8 @@ def compare_orders(include_done=False):
     ai_pos = {r["case_id"]: i for i, r in enumerate(get_worklist(include_done, "ai"), 1)}
     out = []
     for i, r in enumerate(fifo, 1):
-        out.append({"case_id": r["case_id"], "uploaded_at": r["uploaded_at"],
+        out.append({"case_id": r["case_id"], "flag": "⚠️" if r.get("warnings") else "",
+                    "uploaded_at": r["uploaded_at"],
                     "predicted_class": r["predicted_class"],
                     "urgency_score": r["urgency_score"], "status": r["status"],
                     "fifo_position": i, "ai_position": ai_pos[r["case_id"]],

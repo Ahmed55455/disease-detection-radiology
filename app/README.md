@@ -41,6 +41,9 @@ python app/test_db.py         # runs the tests
   which shows each case's position in both orders and the average position of COVID cases.
   `db.compare_orders()` returns the same table.
 - Status flow: `pending -> in_review -> done` (a case in review can go back to `pending`).
+- `predict()` warnings (for example a colored image) are stored in the `warnings` column
+  (joined by `; `) and shown as ⚠️ in the worklist. A warning does **not** change the priority:
+  the radiologist decides.
 - `done` requires the radiologist label (one of the 4 classes) and sets `read_at`.
 - Times are ISO 8601 with timezone, for example `2026-10-13T21:30:05+03:00`.
 
@@ -55,15 +58,16 @@ to update cases already stored.
 ## CSV export for the simulation (Member 3)
 
 Page **Export** -> **Download worklist.csv**, or in Python `db.export_csv("worklist.csv")`.
-Columns: `case_id, uploaded_at, read_at, predicted_class, urgency_score, status`.
+Columns: `case_id, uploaded_at, review_started_at, read_at, predicted_class, urgency_score, status`.
+`review_started_at` = when the radiologist pressed Start review (empty if not started).
 All cases are included (also `done`, which have `read_at`).
 
 ## Database columns
 
 `case_id, image_path, heatmap_path, uploaded_at, read_at, predicted_class, p_covid,
 p_lung_opacity, p_normal, p_viral_pneumonia, confidence, urgency_score, status,
-radiologist_label, model_name, review_started_at`.
-`model_name` and `review_started_at` were added in week 3; older `cases.db` files are
+radiologist_label, model_name, review_started_at, warnings`.
+`model_name`, `review_started_at` and `warnings` were added later; older `cases.db` files are
 upgraded automatically.
 
 ## REST API (FastAPI)

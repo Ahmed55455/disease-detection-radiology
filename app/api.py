@@ -45,6 +45,7 @@ def _public(case):
     case = dict(case)
     case.pop("image_path", None)
     case.pop("heatmap_path", None)
+    case["warnings"] = db.warnings_list(case)
     case["image_url"] = f"/cases/{case['case_id']}/image"
     case["heatmap_url"] = f"/cases/{case['case_id']}/heatmap"
     return case
