@@ -178,19 +178,25 @@ Full details and numbers are in `docs/model_findings.md`.
 4. Store `model_name` and `warnings` with each case, and export `review_started_at` (Member 2 and Member 3).
 
 ---
+---
 
 ## 9. Explanation assistant (`model/explain.py`)
 
-Added 2026-11-01. It uses only the output of `predict()`. It never receives the image, the file name or patient data.
+Added 2026-11-02. English only. It uses only the output of `predict()`. It never receives the image, the file name or patient data.
 
 ```python
 from explain import explain, ask
-text = explain(result, lang="en")                       # lang: "en" or "ar"
-out = ask(result, "How sure is the model?", lang="en", backend="template")
+text = explain(result)                                    # plain-language summary of one result
+out = ask(result, "How sure is the model?", backend="template")
 out["answer"]   # str
 out["source"]   # "template" | "ollama" | "gemini" | "refused"
 ```
 
-- `backend="template"` (default) works offline with fixed answers. `"ollama"` and `"gemini"` are optional and fall back to `"template"` if they fail.
-- Questions asking for diagnosis, treatment or medication are refused in code (`source = "refused"`).
-- The assistant explains the model output only. It is not a diagnosis, and the final decision belongs to the radiologist.
+- `lang` is accepted for compatibility but ignored (English only).
+- `backend="template"` (default) works offline with fixed answers and needs no extra software. Recommended default for the app. The app can read it from an environment variable: `os.environ.get("EXPLAIN_BACKEND", "template")`.
+- `backend="ollama"` uses a local language model. It needs Ollama installed on that computer, a model pulled (tested: `qwen2.5:3b`) and the variable `OLLAMA_MODEL` set. `backend="gemini"` needs `GEMINI_API_KEY` and `GEMINI_MODEL` and internet (not tested).
+- Safety rules, applied in code:
+  - Questions asking for a diagnosis, treatment, medication, or whether a patient is sick or healthy are refused (`source = "refused"`) before any language model is called.
+  - Only the class, probabilities, warnings and model name are sent to a language model. Probabilities very close to 0 or 1 are sent as `<0.001` and `>0.999`.
+  - If a language model fails, or its answer mentions causes or findings it was not given (filter in `UNSUPPORTED_RE`), the answer from `"template"` is used instead.
+- Known limits: the filter is a keyword list, so it catches the errors seen in testing but cannot guarantee that every unsupported statement is blocked. The small local model (3B) sometimes writes awkward sentences. The assistant explains the model output only. It is not a diagnosis, and the final decision belongs to the radiologist.
