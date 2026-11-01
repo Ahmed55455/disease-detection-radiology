@@ -106,7 +106,7 @@ def confidence_level(conf):
 def _conf_text(result):
     conf = result["confidence"]
     lvl = confidence_level(conf)
-    pct = f"{conf * 100:.1f}%"
+    pct = ">99.9%" if conf >= 0.9995 else f"{conf * 100:.1f}%"
     base = f"The model's confidence in this class is {lvl} ({pct})."
     extra = {
         "high": " High confidence does not mean the label is correct: in our tests the model was wrong "
