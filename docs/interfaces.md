@@ -176,3 +176,21 @@ Full details and numbers are in `docs/model_findings.md`.
 2. Final urgency rule and decision threshold (Member 3).
 3. Image upload format and size limits in the app (Member 2).
 4. Store `model_name` and `warnings` with each case, and export `review_started_at` (Member 2 and Member 3).
+
+---
+
+## 9. Explanation assistant (`model/explain.py`)
+
+Added 2026-11-01. It uses only the output of `predict()`. It never receives the image, the file name or patient data.
+
+```python
+from explain import explain, ask
+text = explain(result, lang="en")                       # lang: "en" or "ar"
+out = ask(result, "How sure is the model?", lang="en", backend="template")
+out["answer"]   # str
+out["source"]   # "template" | "ollama" | "gemini" | "refused"
+```
+
+- `backend="template"` (default) works offline with fixed answers. `"ollama"` and `"gemini"` are optional and fall back to `"template"` if they fail.
+- Questions asking for diagnosis, treatment or medication are refused in code (`source = "refused"`).
+- The assistant explains the model output only. It is not a diagnosis, and the final decision belongs to the radiologist.
