@@ -141,6 +141,14 @@ def main():
     assert ask_result(res, "Do I have COVID?")["source"] == "refused"
     print("OK  explanation assistant")
 
+    # 10) Printable report (PDF and PNG)
+    from inference import make_report
+    case = db.get_case(a)
+    pdf = make_report(case["image_path"], case["heatmap_path"], res, case, "pdf")
+    png = make_report(img, np.zeros((224, 224, 3), dtype=np.uint8), res, None, "png")
+    assert pdf[:4] == b"%PDF" and png[:4] == b"\x89PNG"
+    print("OK  printable report (PDF and PNG)")
+
     print("\nAll tests passed.")
 
 

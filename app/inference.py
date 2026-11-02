@@ -81,3 +81,14 @@ def ask_result(res, question):
     Diagnosis and treatment questions are refused by explain.py."""
     from explain import ask
     return ask(res, question, backend=EXPLAIN_BACKEND)
+
+
+def make_report(image, heatmap, res, case=None, fmt="pdf"):
+    """Printable one-page report (bytes). fmt: 'pdf' or 'png'. See report.py."""
+    import db
+    from report import build_report
+    try:
+        text = explain_result(res)
+    except Exception:
+        text = ""
+    return build_report(image, heatmap, res, db.urgency_score(res["probabilities"]), text, case, fmt)

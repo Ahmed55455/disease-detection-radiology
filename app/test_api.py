@@ -72,6 +72,12 @@ def main():
     assert client.post(f"/cases/{case_id}/ask", json={"question": " "}).status_code == 400
     print("OK  /explain and /ask (template answer, diagnosis question refused)")
 
+    r = client.get(f"/cases/{case_id}/report")
+    assert r.status_code == 200 and r.content[:4] == b"%PDF"
+    r = client.get(f"/cases/{case_id}/report", params={"fmt": "png"})
+    assert r.status_code == 200 and r.content[:8] == b"\x89PNG\r\n\x1a\n"
+    print("OK  /report (PDF and PNG)")
+
     assert client.post(f"/cases/{case_id}/done", json={}).status_code == 409   # must review first
     assert client.post(f"/cases/{case_id}/start_review").json()["status"] == "in_review"
     r = client.post(f"/cases/{case_id}/done", json={"radiologist_label": "COVID"})

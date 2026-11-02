@@ -10,6 +10,7 @@ The system assists radiologists and does not replace them. It is limited by its 
 | `inference.py` | Checks the uploaded file, then calls `predict()` from `model/predict.py` |
 | `db.py` | SQLite database: save cases, worklist order, status flow, urgency rule, CSV export |
 | `test_db.py` | Tests for `db.py` and the upload checks (no PyTorch needed) |
+| `report.py` | Printable one-page report of a result (PDF or PNG), matplotlib only |
 | `api.py` | REST API (FastAPI) using the same `inference.py` and `db.py` |
 | `test_api.py` | Tests for the API with a fake model (no checkpoint needed) |
 | `seed_demo.py` | Fills the worklist with real test images for a demo |
@@ -41,6 +42,14 @@ the output of `predict()` (no image, no patient data) and refuses diagnosis/trea
 Backend: environment variable `EXPLAIN_BACKEND` (default `template`, offline, works everywhere;
 `ollama` needs Ollama installed on that computer). API: `GET /cases/{id}/explain`,
 `POST /cases/{id}/ask` with `{"question": "..."}`.
+
+## Printable report
+
+After a result (Upload page) and in the Worklist case view: **Report (PDF)** for printing and
+**Report (PNG)** as an image. One A4 page: case info, X-ray and heatmap, prediction, confidence,
+urgency, probabilities, AI explanation, image-check warnings, radiologist review box (final label
+or blank lines to fill in, signature line) and the disclaimer. No patient data is shown (the system
+stores none). API: `GET /cases/{id}/report?fmt=pdf|png`.
 
 ## Worklist
 

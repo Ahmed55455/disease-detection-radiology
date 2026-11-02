@@ -10,7 +10,7 @@ import streamlit as st
 
 import db
 from inference import (InvalidImageError, analyze, ask_result, explain_result, load_image,
-                       result_from_case)
+                       make_report, result_from_case)
 
 st.set_page_config(page_title="Chest X-ray Assistant", page_icon="🩻", layout="wide")
 db.init_db()
@@ -97,6 +97,22 @@ def explanation_box(res, key):
                 st.caption(f"Answer source: {out['source']}")
             except Exception as e:
                 st.error(f"Could not answer: {e}")
+
+
+def report_buttons(image, heatmap, res, case, key):
+    """Download the result as a printable PDF report or as a PNG image."""
+    cache_key = f"report-{key}-{case['status'] if case else 'unsaved'}"
+    if cache_key not in st.session_state:               # build once, not on every click
+        with st.spinner("Preparing the report..."):
+            st.session_state[cache_key] = {fmt: make_report(image, heatmap, res, case, fmt)
+                                           for fmt in ("pdf", "png")}
+    files = st.session_state[cache_key]
+    name = f"case_{case['case_id']}" if case else "xray_result"
+    c1, c2, _ = st.columns([1, 1, 2])
+    c1.download_button("🖨️ Report (PDF)", files["pdf"], file_name=f"{name}_report.pdf",
+                       mime="application/pdf", key=f"{cache_key}-pdf", width="stretch")
+    c2.download_button("🖼️ Report (PNG)", files["png"], file_name=f"{name}_report.png",
+                       mime="image/png", key=f"{cache_key}-png", width="stretch")
 
 
 TABLE_CONFIG = {
@@ -210,8 +226,11 @@ elif page == "Upload & Analyze":
             st.bar_chart(probs, horizontal=True, x_label="probability", y_label="")
             explanation_box(res, key=f"up-{key}")
 
-            if st.session_state["saved"]:
-                st.success(f"Saved as case #{st.session_state['saved']}. "
+            saved = st.session_state["saved"]
+            report_buttons(img, res["heatmap"], res, db.get_case(saved) if saved else None,
+                           key=f"up-{key}")
+            if saved:
+                st.success(f"Saved as case #{saved}. "
                            "Open the **Worklist** to see its place in the queue.")
             elif st.button("➕ Add to worklist", type="primary"):
                 st.session_state["saved"] = db.save_case(img, res)
@@ -279,6 +298,8 @@ elif page == "Worklist":
             st.warning(f"⚠️ Image check: {w} The case keeps its priority; please check the image.")
         with st.expander("🤖 Explain this result"):
             explanation_box(result_from_case(row), key=f"case-{row['case_id']}")
+        report_buttons(row["image_path"], row["heatmap_path"], result_from_case(row), row,
+                       key=f"case-{row['case_id']}")
 
         try:
             if row["status"] == "pending":

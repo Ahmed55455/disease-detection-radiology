@@ -13,12 +13,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))   # so "import db" works
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse, Response
 from pydantic import BaseModel
 
 import db
 from inference import (InvalidImageError, analyze, ask_result, explain_result, load_image,
-                       result_from_case)
+                       make_report, result_from_case)
 
 app = FastAPI(
     title="Chest X-ray Worklist API",
@@ -137,6 +137,16 @@ def ask_case(case_id: int, body: AskRequest):
         raise HTTPException(400, "Question is empty")
     out = ask_result(result_from_case(_case_or_404(case_id)), body.question)
     return {"case_id": case_id, **out}
+
+
+@app.get("/cases/{case_id}/report")
+def case_report(case_id: int, fmt: str = Query("pdf", pattern="^(pdf|png)$")):
+    """Printable one-page report of the case (PDF or PNG)."""
+    case = _case_or_404(case_id)
+    data = make_report(case["image_path"], case["heatmap_path"], result_from_case(case), case, fmt)
+    media = "application/pdf" if fmt == "pdf" else "image/png"
+    return Response(data, media_type=media, headers={
+        "Content-Disposition": f"attachment; filename=case_{case_id}_report.{fmt}"})
 
 
 def _move(case_id, status, label=None):
