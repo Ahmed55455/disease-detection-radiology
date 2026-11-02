@@ -57,6 +57,10 @@
   .warn { background: var(--warn-bg); color: var(--warn-text); border-radius: 10px; padding: 8px 10px;
           font-size: 0.85rem; margin: 8px 0; }
   .ok { color: var(--ok); font-weight: 600; }
+  .stop { background: var(--accent-soft); color: var(--accent); border-radius: 12px; padding: 12px;
+          font-size: 0.92rem; margin: 10px 0; }
+  .stop b { display: block; font-size: 1rem; margin-bottom: 4px; }
+  .pred.dim { opacity: 0.45; }
   .error { background: var(--accent-soft); color: var(--accent); border-radius: 10px; padding: 10px 12px; }
   .explain { white-space: pre-line; font-size: 0.92rem; }
   .links { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
@@ -136,6 +140,7 @@ const DISPLAY = {"COVID": "COVID-19", "Lung_Opacity": "Lung Opacity", "Normal": 
 const ORDER = ["COVID", "Lung_Opacity", "Normal", "Viral Pneumonia"];
 const MAX_SIDE = 1600;            // resize on the phone before upload (faster, under 10 MB)
 const $ = (id) => document.getElementById(id);
+let lastBlob = null;              // kept so "Add anyway" can send the same photo again
 
 function pct(p) { return p >= 0.9995 ? ">99.9%" : (p * 100).toFixed(1) + "%"; }
 
@@ -162,13 +167,18 @@ async function analyze(file) {
   let blob;
   try { blob = await shrink(file); } catch (e) { blob = file; }   // older browsers: send as is
   $("photo").src = URL.createObjectURL(blob);
+  lastBlob = blob;
+  await send(blob, $("saveBox").checked, true);
+}
 
+async function send(blob, save, skipIfWarnings) {
+  show("busy");
   const form = new FormData();
   form.append("file", blob, "phone_photo.jpg");
-  const save = $("saveBox").checked;
   $("busyText").textContent = "Analyzing… (the first photo can take a few seconds)";
   try {
-    const r = await fetch(`analyze?source=phone&save=${save}`, { method: "POST", body: form });
+    const r = await fetch(`analyze?source=phone&save=${save}&skip_if_warnings=${skipIfWarnings}`,
+                          { method: "POST", body: form });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(data.detail || `Server error (${r.status})`);
     render(data);
@@ -181,8 +191,9 @@ async function analyze(file) {
 
 function render(d) {
   const cls = d["class"];
+  const suspect = d.not_saved_reason === "warnings";
   $("pred").textContent = DISPLAY[cls] || cls;
-  $("pred").className = "pred" + (cls === "COVID" ? " crit" : "");
+  $("pred").className = "pred" + (cls === "COVID" ? " crit" : "") + (suspect ? " dim" : "");
   $("conf").textContent = pct(d.confidence);
   $("urg").textContent = d.urgency_score.toFixed(2);
 
@@ -205,9 +216,23 @@ function render(d) {
       `<a href="cases/${d.case_id}/report?fmt=pdf" target="_blank">🖨️ Report (PDF)</a>` +
       `<a href="cases/${d.case_id}/report?fmt=png" target="_blank">🖼️ Report (PNG)</a>`;
   } else {
-    $("heatmap").parentElement.hidden = true;     // the heatmap is stored only with a saved case
-    $("saved").innerHTML = `<p class="label">Not saved to the worklist.</p>`;
+    if (d.heatmap_png) {
+      $("heatmap").src = "data:image/png;base64," + d.heatmap_png;
+      $("heatmap").parentElement.hidden = false;
+    } else {
+      $("heatmap").parentElement.hidden = true;
+    }
     $("links").innerHTML = "";
+    if (suspect) {
+      $("saved").innerHTML =
+        `<div class="stop"><b>⛔ This may not be a chest X-ray</b>
+         The model always picks one of its 4 classes, even for a photo that is not an X-ray,
+         so this prediction is not reliable. The photo was NOT added to the worklist.</div>
+         <button class="ghost" id="addAnyway" type="button">It is a chest X-ray: add anyway</button>`;
+      $("addAnyway").onclick = () => send(lastBlob, true, false);
+    } else {
+      $("saved").innerHTML = `<p class="label">Not saved to the worklist.</p>`;
+    }
   }
   show("result");
   window.scrollTo({ top: 0, behavior: "smooth" });

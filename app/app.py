@@ -265,6 +265,15 @@ elif page == "Upload & Analyze":
             if saved:
                 st.success(f"Saved as case #{saved}. "
                            "Open the **Worklist** to see its place in the queue.")
+            elif res["warnings"]:
+                # Possibly not a chest X-ray: do not add it by default (priority is never
+                # changed automatically; the user decides whether it is a real X-ray).
+                st.error("⛔ **This may not be a chest X-ray.** The model always picks one of its "
+                         "4 classes, even for an image that is not an X-ray, so this prediction is "
+                         "not reliable. It was not added to the worklist.")
+                if st.button("It is a chest X-ray: add anyway"):
+                    st.session_state["saved"] = db.save_case(img, res, source="web")
+                    st.rerun()
             elif st.button("➕ Add to worklist", type="primary"):
                 st.session_state["saved"] = db.save_case(img, res, source="web")
                 st.rerun()
@@ -335,6 +344,12 @@ elif page == "Worklist":
             explanation_box(result_from_case(row), key=f"case-{row['case_id']}")
         report_buttons(row["image_path"], row["heatmap_path"], result_from_case(row), row,
                        key=f"case-{row['case_id']}")
+        with st.popover("🗑️ Remove this case"):
+            st.write("Only for test or invalid images (for example a photo that is not an X-ray). "
+                     "The case and its images are deleted.")
+            if st.button("Yes, remove it", key=f"del-{row['case_id']}", type="primary"):
+                db.delete_case(row["case_id"])
+                st.rerun()
 
         try:
             if row["status"] == "pending":

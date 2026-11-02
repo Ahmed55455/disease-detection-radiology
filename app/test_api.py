@@ -64,6 +64,20 @@ def main():
         con.execute("DELETE FROM cases WHERE case_id=?", (phone_id,))
     print("OK  /mobile page and phone upload (source = phone)")
 
+    # A result with warnings is not added when skip_if_warnings=true (maybe not an X-ray)
+    real = api.analyze
+    api.analyze = lambda image: {**real(image), "warnings": ["Image is colored."]}
+    r = client.post("/analyze", params={"skip_if_warnings": True, "source": "phone"},
+                    files={"file": ("lamp.jpg", png(), "image/jpeg")}).json()
+    assert r["case_id"] is None and r["not_saved_reason"] == "warnings" and r["heatmap_png"]
+    r = client.post("/analyze", params={"skip_if_warnings": False, "source": "phone"},
+                    files={"file": ("lamp.jpg", png(), "image/jpeg")}).json()
+    assert r["case_id"]                                   # "add anyway"
+    assert client.delete(f"/cases/{r['case_id']}").json() == {"deleted": r["case_id"]}
+    assert client.get(f"/cases/{r['case_id']}").status_code == 404
+    api.analyze = real
+    print("OK  suspicious image not added automatically; add anyway; delete case")
+
     cases = client.get("/cases").json()
     assert cases[0]["warnings"] == [] and cases[0]["model_name"] == "fake"
     assert cases[0]["case_id"] == case_id and "image_path" not in cases[0]

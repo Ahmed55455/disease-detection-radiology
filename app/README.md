@@ -57,6 +57,11 @@ On the laptop, open the **Phone capture** box in the sidebar and scan the QR cod
 `/analyze?source=phone`, shows the prediction, heatmap, explanation and report links, and adds the
 case to the worklist (marked 📱 on the laptop). The first time, Windows may ask to allow Python
 through the firewall: choose **Private networks**.
+If `predict()` returns a warning (for example a coloured photo, which may not be an X-ray), the
+image is **not added automatically** (phone page and laptop upload page): a red message says the
+prediction is not reliable and **"It is a chest X-ray: add anyway"** adds it. Priority is never
+changed automatically. Test or invalid cases can be removed in the Worklist (**Remove this case**,
+API `DELETE /cases/{id}`).
 Limitation: the model was trained on digital images; phone photos of a screen or film were not
 tested (glare, angle, colour), so results can be less reliable. The page says so.
 

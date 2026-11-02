@@ -84,6 +84,10 @@ def main():
         con.execute("DELETE FROM cases WHERE case_id=?", (d,))
     assert db.get_case(a)["source"] == "web"
     expect_error(db.save_case, img, fake_result("COVID", covid), None, "fax")
+    tmp_case = db.save_case(img, fake_result("Normal", normal))
+    paths = [db.get_case(tmp_case)[k] for k in ("image_path", "heatmap_path")]
+    assert db.delete_case(tmp_case) and db.get_case(tmp_case) is None
+    assert not any(Path(x).exists() for x in paths) and not db.delete_case(tmp_case)
     print("OK  warnings stored, priority unchanged")
 
     # 4) ISO 8601 time with timezone

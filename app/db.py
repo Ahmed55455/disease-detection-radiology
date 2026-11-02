@@ -120,6 +120,21 @@ def save_case(image, res, uploaded_at=None, source="web"):
         return cur.lastrowid
 
 
+def delete_case(case_id):
+    """Remove a case and its stored images (for test or invalid uploads). Returns True if found."""
+    case = get_case(case_id)
+    if case is None:
+        return False
+    with closing(_conn()) as c, c:
+        c.execute("DELETE FROM cases WHERE case_id=?", (case_id,))
+    for key in ("image_path", "heatmap_path"):
+        try:
+            Path(case[key]).unlink(missing_ok=True)
+        except (TypeError, OSError):
+            pass
+    return True
+
+
 def warnings_list(case):
     """Warnings of a stored case as a list (empty list if none)."""
     text = case.get("warnings") or ""

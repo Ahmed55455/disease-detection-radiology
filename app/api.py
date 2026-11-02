@@ -6,6 +6,8 @@ Interactive docs:               http://127.0.0.1:8000/docs
 It reuses inference.py (upload checks + predict()) and db.py (SQLite), so the
 Streamlit app and the API always share the same rules and the same database.
 """
+import base64
+import io
 import sys
 import threading
 from pathlib import Path
@@ -14,6 +16,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))   # so "import db" work
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, Response
+import numpy as np
+from PIL import Image
 from pydantic import BaseModel
 
 import db
@@ -74,7 +78,10 @@ def health():
 async def analyze_image(file: UploadFile = File(...),
                         save: bool = Query(True, description="Add the case to the worklist"),
                         source: str = Query("api", pattern="^(api|phone|web)$",
-                                            description="Where the image comes from")):
+                                            description="Where the image comes from"),
+                        skip_if_warnings: bool = Query(
+                            False, description="Do not add to the worklist if predict() "
+                                               "returns warnings (e.g. maybe not an X-ray)")):
     """Upload a chest X-ray (PNG/JPG, max 10 MB). Returns the prediction."""
     data = await file.read()
     try:
@@ -100,8 +107,15 @@ async def analyze_image(file: UploadFile = File(...),
         out["explanation"] = explain_result(res)
     except Exception:
         out["explanation"] = None
-    if save:
+    out["not_saved_reason"] = None
+    if save and skip_if_warnings and res["warnings"]:
+        out["not_saved_reason"] = "warnings"
+    elif save:
         out["case_id"] = db.save_case(image, res, source=source)
+    if out["case_id"] is None:                       # no stored heatmap: send it inline
+        buf = io.BytesIO()
+        Image.fromarray(np.asarray(res["heatmap"], dtype=np.uint8)).save(buf, format="PNG")
+        out["heatmap_png"] = base64.b64encode(buf.getvalue()).decode("ascii")
     return out
 
 
@@ -132,6 +146,14 @@ def get_image(case_id: int):
 @app.get("/cases/{case_id}/heatmap")
 def get_heatmap(case_id: int):
     return FileResponse(_case_or_404(case_id)["heatmap_path"], media_type="image/png")
+
+
+@app.delete("/cases/{case_id}")
+def delete_case(case_id: int):
+    """Remove a case (test or invalid upload) and its images."""
+    _case_or_404(case_id)
+    db.delete_case(case_id)
+    return {"deleted": case_id}
 
 
 @app.get("/cases/{case_id}/explain")
