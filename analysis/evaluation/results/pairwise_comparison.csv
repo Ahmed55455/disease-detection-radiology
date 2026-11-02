@@ -1,0 +1,4 @@
+model_a,model_b,a_right_b_wrong,a_wrong_b_right,mcnemar_p,bonferroni_threshold,significant_after_correction,macro_f1_diff_a_minus_b,diff_ci
+resnet50,densenet121,40,49,0.3966,0.0167,False,-0.0020,"[-0.0066, 0.0025]"
+resnet50,efficientnet_b0,64,50,0.2232,0.0167,False,0.0043,"[-0.0017, 0.0108]"
+densenet121,efficientnet_b0,64,41,0.0313,0.0167,False,0.0063,"[0.0003, 0.0124]"

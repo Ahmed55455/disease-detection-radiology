@@ -1,0 +1,4 @@
+weights,cost_ratio_fn_fp,high_threshold,sensitivity,specificity,false_negatives,false_positives,cost_per_100_cases,"HIGH share, true COVID","HIGH share, true Lung_Opacity","HIGH share, true Normal","HIGH share, true Viral Pneumonia"
+W1 main (interfaces.md),5,0.1800,0.9854,0.8967,12,79,8.7697,1.0000,0.9734,0.1033,1.0000
+W2 any disease equal,5,0.1800,0.9854,0.8980,12,78,8.7066,1.0000,0.9734,0.1020,1.0000
+W3 COVID first,5,0.0800,0.9854,0.8980,12,78,8.7066,1.0000,0.9734,0.1020,1.0000

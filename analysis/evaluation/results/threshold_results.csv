@@ -1,0 +1,6 @@
+rule,cost_ratio_fn_fp,threshold,sensitivity,specificity,false_negatives,false_positives,cost_per_100_cases
+argmax (default: predicted class != Normal),5,,0.9671,0.9451,27,42,11.1672
+1 - P(Normal) >= threshold,1,0.6500,0.9585,0.9634,34,28,3.9117
+1 - P(Normal) >= threshold,2,0.4100,0.9720,0.9373,23,48,5.9306
+1 - P(Normal) >= threshold,5,0.1800,0.9854,0.8980,12,78,8.7066
+1 - P(Normal) >= threshold,10,0.1800,0.9854,0.8980,12,78,12.4921
