@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f2933">
+<title>X-ray Capture</title>
+<style>
+  :root {
+    --bg: #f5f7fa; --card: #ffffff; --text: #1f2933; --muted: #616e7c; --line: #d9e2ec;
+    --accent: #c0392b; --accent-soft: rgba(192, 57, 43, 0.10); --ok: #2f855a; --warn-bg: #fff8e1;
+    --warn-text: #8a6100; --bar: #9aa5b1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12171d; --card: #1c232b; --text: #e4e7eb; --muted: #9aa5b1; --line: #323f4b;
+      --accent: #e5604f; --accent-soft: rgba(229, 96, 79, 0.15); --ok: #68d391; --warn-bg: #3a3218;
+      --warn-text: #f6d77a; --bar: #52606d;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 520px; margin: 0 auto; padding: 16px 16px 40px; }
+  h1 { font-size: 1.35rem; margin: 6px 0 2px; }
+  .sub { color: var(--muted); font-size: 0.9rem; margin: 0 0 14px; }
+  .note { background: var(--warn-bg); color: var(--warn-text); border-radius: 10px;
+          padding: 10px 12px; font-size: 0.85rem; margin-bottom: 14px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+          padding: 16px; margin-bottom: 14px; }
+  .big { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%;
+         min-height: 64px; border: 0; border-radius: 14px; background: var(--accent); color: #fff;
+         font-size: 1.15rem; font-weight: 600; cursor: pointer; }
+  .big:active { transform: scale(0.99); }
+  .ghost { display: block; width: 100%; margin-top: 10px; min-height: 48px; border-radius: 12px;
+           border: 1px solid var(--line); background: transparent; color: var(--text); font-size: 1rem; }
+  input[type=file] { display: none; }
+  label.row { display: flex; align-items: center; gap: 8px; margin-top: 12px; color: var(--muted);
+              font-size: 0.9rem; }
+  details { color: var(--muted); font-size: 0.88rem; margin-top: 10px; }
+  details li { margin: 3px 0; }
+  .imgs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .imgs figure { margin: 0; }
+  .imgs img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; background: #000; }
+  figcaption { font-size: 0.75rem; color: var(--muted); text-align: center; margin-top: 3px; }
+  .label { color: var(--muted); font-size: 0.8rem; }
+  .pred { font-size: 1.7rem; font-weight: 700; margin: 2px 0 8px; }
+  .pred.crit { color: var(--accent); }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+  .stats div { background: var(--bg); border-radius: 10px; padding: 8px 10px; }
+  .stats b { display: block; font-size: 1.2rem; }
+  .bar { display: grid; grid-template-columns: 110px 1fr 54px; align-items: center; gap: 8px;
+         font-size: 0.85rem; margin: 5px 0; }
+  .track { height: 10px; background: var(--bg); border-radius: 6px; overflow: hidden; }
+  .fill { height: 100%; background: var(--bar); border-radius: 6px; }
+  .fill.top { background: var(--accent); }
+  .warn { background: var(--warn-bg); color: var(--warn-text); border-radius: 10px; padding: 8px 10px;
+          font-size: 0.85rem; margin: 8px 0; }
+  .ok { color: var(--ok); font-weight: 600; }
+  .error { background: var(--accent-soft); color: var(--accent); border-radius: 10px; padding: 10px 12px; }
+  .explain { white-space: pre-line; font-size: 0.92rem; }
+  .links { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .links a { flex: 1; text-align: center; padding: 12px; border-radius: 12px; border: 1px solid var(--line);
+             color: var(--text); text-decoration: none; font-size: 0.95rem; min-width: 140px; }
+  .spinner { width: 34px; height: 34px; border: 4px solid var(--line); border-top-color: var(--accent);
+             border-radius: 50%; animation: spin 0.9s linear infinite; margin: 8px auto; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .center { text-align: center; color: var(--muted); }
+  [hidden] { display: none !important; }
+  footer { color: var(--muted); font-size: 0.75rem; text-align: center; margin-top: 18px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>🩻 X-ray Capture</h1>
+  <p class="sub">Take a photo of a chest X-ray. It is uploaded, analyzed and added to the radiologist worklist.</p>
+  <div class="note">⚕️ This tool assists radiologists and does not replace them. It is not a medical diagnosis.
+    The model was trained on digital X-ray images, so results on phone photos can be less reliable.</div>
+
+  <section class="card" id="captureCard">
+    <button class="big" id="cameraBtn" type="button">📷 Take X-ray photo</button>
+    <button class="ghost" id="galleryBtn" type="button">🖼️ Choose from gallery</button>
+    <input id="cameraInput" type="file" accept="image/*" capture="environment">
+    <input id="galleryInput" type="file" accept="image/png,image/jpeg">
+    <label class="row"><input type="checkbox" id="saveBox" checked> Add to the worklist</label>
+    <details>
+      <summary>Tips for a good photo</summary>
+      <ul>
+        <li>Lay the film flat or hold the phone parallel to the screen.</li>
+        <li>Fill the frame with the chest; avoid the room around it.</li>
+        <li>No glare or reflections; turn off the flash.</li>
+        <li>Hold still so the photo is sharp.</li>
+      </ul>
+    </details>
+  </section>
+
+  <section class="card center" id="busy" hidden>
+    <div class="spinner"></div>
+    <div id="busyText">Uploading…</div>
+  </section>
+
+  <section class="card" id="errorCard" hidden><div class="error" id="errorText"></div></section>
+
+  <section id="result" hidden>
+    <div class="card">
+      <div class="imgs">
+        <figure><img id="photo" alt="Your photo"><figcaption>Your photo</figcaption></figure>
+        <figure><img id="heatmap" alt="Grad-CAM heatmap"><figcaption>Grad-CAM (approximate)</figcaption></figure>
+      </div>
+    </div>
+    <div class="card">
+      <div class="label">AI prediction</div>
+      <div class="pred" id="pred"></div>
+      <div class="stats">
+        <div><span class="label">Confidence</span><b id="conf"></b></div>
+        <div><span class="label">Urgency (0-1)</span><b id="urg"></b></div>
+      </div>
+      <div id="bars"></div>
+      <div id="warnings"></div>
+      <div id="saved"></div>
+    </div>
+    <div class="card" id="explainCard">
+      <div class="label">🤖 AI explanation</div>
+      <div class="explain" id="explain"></div>
+    </div>
+    <div class="links" id="links"></div>
+    <button class="big" id="againBtn" type="button" style="margin-top:14px">📷 Take another photo</button>
+  </section>
+
+  <footer>Istanbul Arel University · Interdisciplinary Engineering Project · Fall 2026</footer>
+</main>
+
+<script>
+const DISPLAY = {"COVID": "COVID-19", "Lung_Opacity": "Lung Opacity", "Normal": "Normal",
+                 "Viral Pneumonia": "Viral Pneumonia"};
+const ORDER = ["COVID", "Lung_Opacity", "Normal", "Viral Pneumonia"];
+const MAX_SIDE = 1600;            // resize on the phone before upload (faster, under 10 MB)
+const $ = (id) => document.getElementById(id);
+
+function pct(p) { return p >= 0.9995 ? ">99.9%" : (p * 100).toFixed(1) + "%"; }
+
+function show(section) {
+  for (const id of ["busy", "errorCard", "result"]) $(id).hidden = id !== section;
+  $("captureCard").hidden = section === "result" || section === "busy";
+}
+
+async function shrink(file) {
+  // Respect the photo orientation and make the longest side at most MAX_SIDE pixels.
+  const bmp = await createImageBitmap(file, { imageOrientation: "from-image" });
+  const scale = Math.min(1, MAX_SIDE / Math.max(bmp.width, bmp.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bmp.width * scale);
+  canvas.height = Math.round(bmp.height * scale);
+  canvas.getContext("2d").drawImage(bmp, 0, 0, canvas.width, canvas.height);
+  return new Promise((ok) => canvas.toBlob(ok, "image/jpeg", 0.92));
+}
+
+async function analyze(file) {
+  if (!file) return;
+  show("busy");
+  $("busyText").textContent = "Preparing the photo…";
+  let blob;
+  try { blob = await shrink(file); } catch (e) { blob = file; }   // older browsers: send as is
+  $("photo").src = URL.createObjectURL(blob);
+
+  const form = new FormData();
+  form.append("file", blob, "phone_photo.jpg");
+  const save = $("saveBox").checked;
+  $("busyText").textContent = "Analyzing… (the first photo can take a few seconds)";
+  try {
+    const r = await fetch(`analyze?source=phone&save=${save}`, { method: "POST", body: form });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.detail || `Server error (${r.status})`);
+    render(data);
+  } catch (e) {
+    $("errorText").textContent = "⚠️ " + (e.message || "Could not reach the server. Is the laptop on the same Wi-Fi?");
+    show("errorCard");
+    $("captureCard").hidden = false;
+  }
+}
+
+function render(d) {
+  const cls = d["class"];
+  $("pred").textContent = DISPLAY[cls] || cls;
+  $("pred").className = "pred" + (cls === "COVID" ? " crit" : "");
+  $("conf").textContent = pct(d.confidence);
+  $("urg").textContent = d.urgency_score.toFixed(2);
+
+  $("bars").innerHTML = ORDER.map((c) => {
+    const p = d.probabilities[c];
+    return `<div class="bar"><span>${DISPLAY[c]}</span>
+      <div class="track"><div class="fill ${c === cls ? "top" : ""}" style="width:${(p * 100).toFixed(1)}%"></div></div>
+      <span>${pct(p)}</span></div>`;
+  }).join("");
+
+  $("warnings").innerHTML = (d.warnings || []).map((w) => `<div class="warn">⚠️ Image check: ${w}</div>`).join("");
+  $("explain").textContent = (d.explanation || "No explanation available.");
+  $("explainCard").hidden = !d.explanation;
+
+  if (d.case_id) {
+    $("heatmap").src = `cases/${d.case_id}/heatmap?t=${Date.now()}`;
+    $("heatmap").parentElement.hidden = false;
+    $("saved").innerHTML = `<p class="ok">✅ Added to the worklist as case #${d.case_id}</p>`;
+    $("links").innerHTML =
+      `<a href="cases/${d.case_id}/report?fmt=pdf" target="_blank">🖨️ Report (PDF)</a>` +
+      `<a href="cases/${d.case_id}/report?fmt=png" target="_blank">🖼️ Report (PNG)</a>`;
+  } else {
+    $("heatmap").parentElement.hidden = true;     // the heatmap is stored only with a saved case
+    $("saved").innerHTML = `<p class="label">Not saved to the worklist.</p>`;
+    $("links").innerHTML = "";
+  }
+  show("result");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+$("cameraBtn").onclick = () => $("cameraInput").click();
+$("galleryBtn").onclick = () => $("galleryInput").click();
+$("againBtn").onclick = () => { show(null); $("captureCard").hidden = false; $("cameraInput").click(); };
+for (const id of ["cameraInput", "galleryInput"]) {
+  $(id).addEventListener("change", (e) => { analyze(e.target.files[0]); e.target.value = ""; });
+}
+</script>
+</body>
+</html>

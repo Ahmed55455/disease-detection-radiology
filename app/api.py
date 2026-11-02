@@ -13,7 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))   # so "import db" works
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse, PlainTextResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, Response
 from pydantic import BaseModel
 
 import db
@@ -56,6 +56,15 @@ def _public(case):
     return case
 
 
+MOBILE_PAGE = Path(__file__).resolve().parent / "mobile.html"
+
+
+@app.get("/mobile", response_class=HTMLResponse, include_in_schema=False)
+def mobile_page():
+    """Phone page: take a photo of the X-ray, it is uploaded and analyzed automatically."""
+    return HTMLResponse(MOBILE_PAGE.read_text(encoding="utf-8"))
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -63,7 +72,9 @@ def health():
 
 @app.post("/analyze")
 async def analyze_image(file: UploadFile = File(...),
-                        save: bool = Query(True, description="Add the case to the worklist")):
+                        save: bool = Query(True, description="Add the case to the worklist"),
+                        source: str = Query("api", pattern="^(api|phone|web)$",
+                                            description="Where the image comes from")):
     """Upload a chest X-ray (PNG/JPG, max 10 MB). Returns the prediction."""
     data = await file.read()
     try:
@@ -90,7 +101,7 @@ async def analyze_image(file: UploadFile = File(...),
     except Exception:
         out["explanation"] = None
     if save:
-        out["case_id"] = db.save_case(image, res)
+        out["case_id"] = db.save_case(image, res, source=source)
     return out
 
 

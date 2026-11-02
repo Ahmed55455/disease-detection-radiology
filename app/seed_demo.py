@@ -80,7 +80,8 @@ def main():
             continue
         res = analyze(image)
         arrival = start + timedelta(minutes=args.minutes * i)
-        db.save_case(image, res, uploaded_at=arrival.isoformat(timespec="seconds"))
+        db.save_case(image, res, uploaded_at=arrival.isoformat(timespec="seconds"),
+                     source="demo")
         added += 1
 
         truth = true_class(path, folder)

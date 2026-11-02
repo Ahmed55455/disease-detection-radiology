@@ -75,11 +75,11 @@ def init_db():
                 p_covid REAL, p_lung_opacity REAL, p_normal REAL, p_viral_pneumonia REAL,
                 confidence REAL, urgency_score REAL,
                 status TEXT DEFAULT 'pending', radiologist_label TEXT,
-                model_name TEXT, review_started_at TEXT, warnings TEXT
+                model_name TEXT, review_started_at TEXT, warnings TEXT, source TEXT
             )""")
         # Older cases.db files (week 1-2) do not have the new columns: add them.
         existing = {r["name"] for r in c.execute("PRAGMA table_info(cases)")}
-        for col in ("model_name", "review_started_at", "warnings"):
+        for col in ("model_name", "review_started_at", "warnings", "source"):
             if col not in existing:
                 c.execute(f"ALTER TABLE cases ADD COLUMN {col} TEXT")
 
@@ -89,9 +89,15 @@ def urgency_score(probs):
     return round(float(sum(p * SEVERITY.get(c, 0.0) for c, p in probs.items())), 4)
 
 
-def save_case(image, res, uploaded_at=None):
+SOURCES = ("web", "phone", "api", "demo")
+
+
+def save_case(image, res, uploaded_at=None, source="web"):
     """image: PIL.Image. res: output of inference.analyze(). Returns the new case_id.
-    uploaded_at: ISO 8601 text; default is now (the seed script sets past times)."""
+    uploaded_at: ISO 8601 text; default is now (the seed script sets past times).
+    source: where the image came from: web (laptop app), phone (mobile page), api, demo."""
+    if source not in SOURCES:
+        raise ValueError(f"Unknown source: {source}")
     uploaded_at = uploaded_at or now_iso()
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     img_path = STORAGE / f"{stamp}_image.png"
@@ -104,12 +110,12 @@ def save_case(image, res, uploaded_at=None):
         cur = c.execute(
             """INSERT INTO cases (image_path, heatmap_path, uploaded_at, predicted_class,
                p_covid, p_lung_opacity, p_normal, p_viral_pneumonia,
-               confidence, urgency_score, status, model_name, warnings)
-               VALUES (?,?,?,?,?,?,?,?,?,?,'pending',?,?)""",
+               confidence, urgency_score, status, model_name, warnings, source)
+               VALUES (?,?,?,?,?,?,?,?,?,?,'pending',?,?,?)""",
             (str(img_path), str(hm_path), uploaded_at, res["class"],
              p["COVID"], p["Lung_Opacity"], p["Normal"], p["Viral Pneumonia"],
              res.get("confidence", p[res["class"]]), urgency_score(p),
-             res.get("model_name"), WARNING_SEP.join(res.get("warnings") or [])),
+             res.get("model_name"), WARNING_SEP.join(res.get("warnings") or []), source),
         )
         return cur.lastrowid
 
@@ -151,7 +157,8 @@ def compare_orders(include_done=False):
     ai_pos = {r["case_id"]: i for i, r in enumerate(get_worklist(include_done, "ai"), 1)}
     out = []
     for i, r in enumerate(fifo, 1):
-        out.append({"case_id": r["case_id"], "flag": "⚠️" if r.get("warnings") else "",
+        out.append({"case_id": r["case_id"], "source": r.get("source"),
+                    "flag": "⚠️" if r.get("warnings") else "",
                     "uploaded_at": r["uploaded_at"],
                     "predicted_class": r["predicted_class"],
                     "urgency_score": r["urgency_score"], "status": r["status"],

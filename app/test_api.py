@@ -52,6 +52,18 @@ def main():
     assert r.status_code == 400
     print("OK  /analyze rejects a wrong file type")
 
+    r = client.get("/mobile")
+    assert r.status_code == 200 and 'capture="environment"' in r.text
+    r = client.post("/analyze", params={"source": "phone"},
+                    files={"file": ("phone_photo.jpg", png(), "image/jpeg")})
+    phone_id = r.json()["case_id"]
+    assert db.get_case(phone_id)["source"] == "phone"
+    assert client.post("/analyze", params={"source": "bad"},
+                       files={"file": ("x.png", png(), "image/png")}).status_code == 422
+    with __import__("contextlib").closing(db._conn()) as con, con:
+        con.execute("DELETE FROM cases WHERE case_id=?", (phone_id,))
+    print("OK  /mobile page and phone upload (source = phone)")
+
     cases = client.get("/cases").json()
     assert cases[0]["warnings"] == [] and cases[0]["model_name"] == "fake"
     assert cases[0]["case_id"] == case_id and "image_path" not in cases[0]

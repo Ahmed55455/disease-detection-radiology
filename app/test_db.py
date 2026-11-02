@@ -82,6 +82,8 @@ def main():
     assert ids.index(c) < ids.index(d) < ids.index(a)    # same place as an unflagged COVID case
     with closing(db._conn()) as con, con:
         con.execute("DELETE FROM cases WHERE case_id=?", (d,))
+    assert db.get_case(a)["source"] == "web"
+    expect_error(db.save_case, img, fake_result("COVID", covid), None, "fax")
     print("OK  warnings stored, priority unchanged")
 
     # 4) ISO 8601 time with timezone

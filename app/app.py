@@ -20,6 +20,30 @@ db.init_db()
 DISPLAY = {"COVID": "COVID-19", "Lung_Opacity": "Lung Opacity",
            "Normal": "Normal", "Viral Pneumonia": "Viral Pneumonia"}
 STATUS_ICON = {"pending": "🕒 pending", "in_review": "🔍 in review", "done": "✅ done"}
+SOURCE_ICON = {"web": "💻", "phone": "📱", "api": "🔌", "demo": "🧪"}
+API_PORT = 8000            # the phone page is served by the FastAPI app (app/api.py)
+
+
+def local_ip():
+    """IP address of this laptop on the Wi-Fi (what the phone must open)."""
+    import socket
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))          # no data is sent; only picks the network card
+            return s.getsockname()[0]
+    except OSError:
+        return "127.0.0.1"
+
+
+def qr_png(text):
+    """QR code image (PNG bytes), or None if the 'qrcode' library is not installed."""
+    try:
+        import qrcode
+    except ImportError:
+        return None
+    buf = io.BytesIO()
+    qrcode.make(text, box_size=6, border=2).save(buf, format="PNG")
+    return buf.getvalue()
 
 
 def show(cls):
@@ -53,6 +77,7 @@ def case_table(rows, with_position=True):
     """Readable table for the screen."""
     df = pd.DataFrame([{
         "case": r["case_id"],
+        "from": SOURCE_ICON.get(r.get("source"), ""),
         "⚠️": "⚠️" if r.get("warnings") else "",
         "arrived": short_time(r["uploaded_at"]),
         "AI prediction": show(r["predicted_class"]),
@@ -131,6 +156,14 @@ with st.sidebar:
     st.caption("**Model:** EfficientNet-B0 (provisional)  \n"
                "**Classes:** COVID-19, Lung Opacity, Normal, Viral Pneumonia  \n"
                "**Explanation:** Grad-CAM (approximate)")
+    with st.expander("📱 Phone capture"):
+        phone_url = f"http://{local_ip()}:{API_PORT}/mobile"
+        qr = qr_png(phone_url)
+        if qr:
+            st.image(qr, caption="Scan with the phone camera", width=170)
+        st.code(phone_url, language=None)
+        st.caption("The phone must be on the same Wi-Fi, and the API must be running:  \n"
+                   "`uvicorn app.api:app --host 0.0.0.0 --port 8000`")
     st.caption("Istanbul Arel University · Interdisciplinary Engineering Project · Fall 2026")
 
 st.warning("⚕️ This tool assists radiologists and does not replace them. It is limited by "
@@ -233,7 +266,7 @@ elif page == "Upload & Analyze":
                 st.success(f"Saved as case #{saved}. "
                            "Open the **Worklist** to see its place in the queue.")
             elif st.button("➕ Add to worklist", type="primary"):
-                st.session_state["saved"] = db.save_case(img, res)
+                st.session_state["saved"] = db.save_case(img, res, source="web")
                 st.rerun()
 
 # ---------------------------------------------------------------- Worklist
@@ -263,6 +296,7 @@ elif page == "Worklist":
                 c.metric("Places moved up (average)", f"{crit['moved_up'].mean():.1f}")
             table = pd.DataFrame({
                 "case": cmp["case_id"],
+                "from": cmp["source"].map(lambda x: SOURCE_ICON.get(x, "")),
                 "⚠️": cmp["flag"],
                 "arrived": cmp["uploaded_at"].map(short_time),
                 "AI prediction": cmp["predicted_class"].map(show),
@@ -282,7 +316,8 @@ elif page == "Worklist":
                          column_config=TABLE_CONFIG, width="stretch")
             ids = list(table["case"])
         st.caption("Red rows: AI predicts COVID-19 (most urgent class). ⚠️ = image check "
-                   "warning (priority is NOT changed). The radiologist decides.")
+                   "warning (priority is NOT changed). From: 💻 laptop, 📱 phone, 🧪 demo. "
+                   "The radiologist decides.")
 
         st.divider()
         case_id = st.selectbox("Open case", ids, format_func=lambda i: f"Case #{i}")
