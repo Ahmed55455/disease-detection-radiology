@@ -1,7 +1,7 @@
 # Interfaces Agreement (docs/interfaces.md)
 
 Project: Disease Detection from Radiology Images Using Deep Learning
-Status: DRAFT v0.2 (2026-10-18), written by Member 1 (AI Model). Members 2 and 3 should review and comment.
+Status: DRAFT v0.3 (2026-11-03), written by Member 1 (AI Model). Members 2 and 3 should review and comment.
 
 The system assists radiologists. It does not replace them, and it is limited by its training data.
 
@@ -11,6 +11,9 @@ Changes from v0.1 (all additive, nothing was removed or renamed):
 - Class display names are separated from the internal strings (section 1).
 - Test results updated with the seed-variability finding (section 4).
 - Limitations updated with what was measured (section 7).
+- Section 3: `warnings` storage and the `review_started_at` export are now implemented in `app/db.py`.
+- Section 5: urgency rule and HIGH threshold updated with Member 3's results.
+- New section 9: explanation assistant (`model/explain.py`).
 
 ---
 
@@ -82,7 +85,7 @@ SQLite table `cases`:
 | p_covid, p_lung_opacity, p_normal, p_viral_pneumonia | REAL | Class probabilities |
 | confidence | REAL | Probability of the predicted class |
 | model_name | TEXT | Model that produced the prediction (suggested) |
-| warnings | TEXT | Warnings from `predict()`, for example joined by `;` (suggested) |
+| warnings | TEXT | Warnings from `predict()`, joined by `; ` (implemented in `app/db.py`) |
 | urgency_score | REAL | 0 to 1, see section 5 |
 | heatmap_path | TEXT | Saved Grad-CAM image |
 | status | TEXT | `pending`, `in_review`, `done` |
@@ -91,7 +94,7 @@ SQLite table `cases`:
 
 Worklist order: `urgency_score` descending, ties broken by `uploaded_at` ascending. A FIFO order (`uploaded_at` ascending) is also kept, for comparison with Member 3's simulation.
 
-CSV export for Member 3: `case_id, uploaded_at, read_at, predicted_class, urgency_score, status`. If the time when the radiologist started a case (`review_started_at`) is useful for the simulation, it should be added to the export (Member 3 and Member 2 to decide).
+CSV export for Member 3: `case_id, uploaded_at, review_started_at, read_at, predicted_class, urgency_score, status` (implemented in `app/db.py`).
 
 ---
 
@@ -130,20 +133,27 @@ Variability across 3 training runs per model (seeds 42, 1, 2), mean +- standard 
 | ResNet50 | 0.960 +- 0.001 | 0.970 +- 0.001 |
 | DenseNet121 | 0.961 +- 0.001 | 0.970 +- 0.001 |
 
-The differences between models are small, about the size of the variation between runs of one model. The statistical comparison is Member 3's task. It describes the seed-42 checkpoints only. Do not replace the checkpoint after a threshold or urgency rule has been tuned, because the tuning does not transfer exactly to another checkpoint.
+The differences between models are small, about the size of the variation between runs of one model. Member 3's paired comparison (seed-42 checkpoints) found no significant difference between the models after Bonferroni correction (details in `docs/model_findings.md`, section 3.2). Do not replace the checkpoint after a threshold or urgency rule has been tuned, because the tuning does not transfer exactly to another checkpoint.
 
 ---
 
-## 5. Urgency score (initial proposal, Member 3 to finalize)
+## 5. Urgency score and worklist rule (Member 3, results of 2026-11-02)
 
-Placeholder rule so Member 2 can build the worklist now:
+Rule used by the app and by the simulation (weights unchanged from v0.1):
 
 ```
 urgency_score = sum over classes of ( probability[class] * severity[class] )
 severity = {COVID: 1.0, Viral Pneumonia: 0.7, Lung_Opacity: 0.5, Normal: 0.1}
 ```
 
-These severity values are assumptions, not clinical facts. Member 3 should replace them using the cost-sensitive threshold analysis and radiology workflow research. Only the field name `urgency_score` and its range (0 to 1) are fixed for now.
+These severity values are assumptions, not clinical facts.
+
+- A case is marked HIGH if the urgency is at least 0.18 (cost-sensitive threshold: a false negative costs 5 times a false positive).
+- The worklist is ordered by the continuous `urgency_score` (descending), ties by `uploaded_at` (ascending), as in the simulation.
+- The threshold was tuned on one half of the test set and measured on the other half, for the EfficientNet-B0 seed-42 checkpoint. If the model file is replaced, the threshold must be tuned again. Re-tuning on validation predictions is planned (`model/experiments/predict_val.py`).
+- To be confirmed by Member 3: whether the 0.18 threshold applies to `urgency_score` or to `1 - P(Normal)`. They are close but not identical.
+- Known issue: under high load the slowest 5% of Normal cases waited 516 minutes in the simulation. No aging rule exists yet.
+- Simulation results are in `analysis/evaluation/results/`. Times in the simulation are assumptions.
 
 ---
 
@@ -172,12 +182,11 @@ Full details and numbers are in `docs/model_findings.md`.
 
 ## 8. Open questions
 
-1. Final model for the app: EfficientNet-B0 (current, lightest) or another model, after Member 3's statistical comparison.
-2. Final urgency rule and decision threshold (Member 3).
-3. Image upload format and size limits in the app (Member 2).
-4. Store `model_name` and `warnings` with each case, and export `review_started_at` (Member 2 and Member 3).
+1. Final model for the app: EfficientNet-B0 stays (no significant difference between the three models; lightest). Do not replace the checkpoint after the threshold is tuned.
+2. Which quantity the 0.18 threshold applies to, and re-tuning on validation predictions (Member 3).
+3. Aging rule against starvation of Normal cases, or a stated limitation (Member 3 and Member 2).
+4. Image upload format and size limits in the app (Member 2).
 
----
 ---
 
 ## 9. Explanation assistant (`model/explain.py`)

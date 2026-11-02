@@ -1,10 +1,10 @@
 # Model Findings (Member 1, AI Model)
 
-Status: working notes for the report, last updated 2026-10-18.
+Status: working notes for the report, last updated 2026-11-03.
 Every number below was measured in this project. Interpretations are marked as such; hypotheses that were not tested say so.
 
 Rules followed throughout:
-- Test sets were never used to choose or tune a model. The best epoch is chosen on validation macro-F1.
+- The test set was never used to choose a model or its training settings. The best epoch is chosen on validation macro-F1. One exception, in the worklist part (section 8.1): Member 3 tuned the decision threshold on one half of the test set and measured it on the other half.
 - The pediatric external set (section 5) is used only as a reference. No threshold or model was tuned on it.
 - The system assists radiologists and does not replace them.
 
@@ -90,13 +90,14 @@ Individual runs (seed 42 / seed 1 / seed 2):
 - Specificity on the clean external set varies a lot between runs of the same model (for example ResNet50 from 0.434 to 0.632), more than the differences between model means. The model ranking on external specificity in section 5 (one run each) is therefore not reliable. Sensitivity is stable (0.981 to 0.998).
 - Test was evaluated once per run and never used to choose a checkpoint.
 - Seed 42 results come from the original training script and the other two from `train_seeds.py` with the same settings. GPU non-determinism was not controlled.
-- A paired statistical comparison on the seed-42 prediction files (`data/predictions/*_test_probs.csv`) is Member 3's task. It describes those exact checkpoints; the seed runs show an additional source of variation (probabilities of the seed 1 and 2 runs were not saved).
-- The final model is not fixed yet. EfficientNet-B0 is used in the app as a provisional choice (lightest and fastest, about 0.4 points lower macro-F1).
+- Member 3 compared the seed-42 prediction files (`data/predictions/*_test_probs.csv`) with exact McNemar tests: ResNet50 vs DenseNet121 p = 0.397, ResNet50 vs EfficientNet-B0 p = 0.223, DenseNet121 vs EfficientNet-B0 p = 0.031. None is significant after Bonferroni correction (threshold 0.0167). The bootstrap confidence interval of the macro-F1 difference DenseNet121 minus EfficientNet-B0 is [0.0003, 0.0124], so at most a small edge for DenseNet121 (about 0.6 points), in line with the seed runs above. This comparison describes the seed-42 checkpoints only; the probabilities of the seed 1 and 2 runs were not saved. Results are in `analysis/evaluation/results/`.
+- Conclusion: the three architectures are practically equivalent on this test set. EfficientNet-B0 is kept in the app because it is the lightest and fastest, at the cost of a possible edge of about 0.4 to 0.6 points macro-F1 for DenseNet121.
 
 ## 4. Explainability (Grad-CAM) and input robustness
 
 - Grad-CAM (EfficientNet-B0, last feature layer, 7x7 map upsampled to 224x224) is approximate, not pixel-accurate.
 - Qualitative check on a handful of images: for COVID the heat is on both lung fields; for Normal it is on the heart and mid-chest; one Lung_Opacity example also showed heat near an image marker in a top corner. A few images are not enough to conclude that the model uses markers.
+- In the app report of one Normal case (confidence 78%), the strongest heat was at the upper right corner of the image, next to a marker and partly outside the lungs. This again shows that Grad-CAM can highlight non-lung areas.
 - Color sensitivity (found by testing): the same COVID X-ray tinted blue was classified Normal with probability 1.000. Fix: `predict()` converts every input to grayscale before the model, as in the training data. After the fix the tinted image is classified COVID again. `predict()` also returns a `warnings` list that flags colored inputs. This was verified on two images only; robustness to other changes (camera photos, compression, rotation) was not tested.
 - A random colored-noise image (single test) was classified Normal (0.572) and Lung_Opacity (0.428). The model has no "not an X-ray" option, and its confidence is not a reliable out-of-distribution signal.
 
@@ -180,6 +181,25 @@ Masks exist only for the main dataset, so these models cannot be used in the app
 - The CSV export has the columns agreed with Member 3. `review_started_at` exists in the database but is not exported.
 - A decision threshold tuned for one checkpoint does not transfer exactly to another checkpoint, because specificity varies between training runs (section 3.2). If the model file in the app is replaced after Member 3 tunes a threshold, the threshold must be tuned again.
 
+### 8.1 Worklist rule and simulation (results reported by Member 3, 2026-11-02)
+
+All numbers in this subsection come from Member 3 (`analysis/evaluation/results/`). Arrival and reading times in the simulation are assumptions, not hospital measurements.
+
+- Cost-sensitive threshold: a false negative costs 5 times a false positive. The threshold on 1 - P(Normal) is 0.18, tuned on one half of the test set and measured on the other half. Sensitivity rises from 0.967 to 0.985, specificity falls from 0.945 to 0.898, and missed disease cases fall from 27 to 12.
+- Urgency rule: the weights of `docs/interfaces.md` are kept (COVID 1.0, Viral Pneumonia 0.7, Lung_Opacity 0.5, Normal 0.1) and a case is HIGH if the urgency is at least 0.18. Two alternative weight sets gave the same conclusion. The queue is ordered by the continuous score, as in the app. The earlier Week 4 report (weights A/B/C) is replaced by these results.
+- Waiting time, FIFO compared with the AI queue (mean minutes): true COVID 17.9 -> 5.1 (5.2 with a weaker model of specificity 0.5); true Normal 17.9 -> 29.0.
+- True disease cases labeled STANDARD (26 cases): 17.5 -> 16.4 minutes with the actual model, but 28.0 minutes with the weaker model, which is worse than FIFO.
+- At high load, the slowest 5% of Normal cases wait 516 minutes (starvation). An aging rule (priority grows with waiting time) was suggested but is not implemented.
+- Notes from Member 1: (a) the threshold was tuned on test data, so these numbers are not fully independent; tuning on the validation set is cleaner (`model/experiments/predict_val.py` produces the validation probabilities); (b) on new pediatric images specificity was 0.43 to 0.67 (section 5), so the weaker-model scenario is the more realistic one for such inputs; (c) the threshold is tied to the EfficientNet-B0 seed-42 checkpoint.
+
+### 8.2 Explanation assistant (`model/explain.py`)
+
+- Explains one predict() result in plain English and answers questions about it (why, confidence, class meaning, heat map, warnings, limits). It uses only the structured result: no image, no file name, no patient data.
+- Default layer: fixed text and keyword rules (works offline). Optional layer: a local language model through Ollama (tested with `qwen2.5:3b`, about 3 to 5 seconds per answer on a laptop with 15 GB RAM and a 4 GB GPU); a Gemini option exists in the code but was not tested.
+- Rules applied in code: questions about diagnosis, treatment, medication or whether a patient is sick are refused before any language model is called; probabilities close to 0 or 1 are sent as `<0.001` and `>0.999`; a language-model answer that mentions causes or findings it was not given (keyword filter) is replaced by the fixed answer.
+- Observed in tests with the 3B model: before the filters it added causes of lung opacity that were not in the facts it had, called the model "certain", and answered a yes/no question about a patient. These were handled by the rules above. The keyword filter catches the errors seen in testing and cannot guarantee that every unsupported statement is blocked.
+- The app currently uses the fixed-text layer. The assistant is not a diagnosis tool and does not look at the image.
+
 ## 9. Limitations to state in the report
 
 1. The system assists radiologists and does not replace them. It is not clinically validated.
@@ -188,7 +208,10 @@ Masks exist only for the main dataset, so these models cannot be used in the app
 4. On unseen pediatric images, specificity is low and unstable (about 0.43 to 0.67 over training runs) while sensitivity stays high (about 0.98 to 1.0).
 5. The model is sensitive to input changes (color was found and mitigated). There is no "not an X-ray" detection beyond a grayscale warning.
 6. Grad-CAM is coarse and was inspected on few images.
-7. Differences of about one point between the three architectures are within or near run-to-run variation.
+7. Differences of about one point between the three architectures are within or near run-to-run variation (no significant difference after Bonferroni correction).
+8. The worklist threshold (0.18) was tuned on half of the test set and is tied to one checkpoint. With the lower specificity seen on new pediatric images, more healthy cases would be marked HIGH and the benefit of the priority queue would shrink; with a weaker model the true disease cases labeled STANDARD wait longer than under FIFO.
+9. Healthy-looking cases can wait very long under the priority queue at high load (the slowest 5% of Normal cases wait 516 minutes in the simulation). No aging rule is implemented. Simulation times are assumptions.
+10. The explanation assistant uses a keyword filter and a small language model; it cannot guarantee that every unsupported statement is blocked.
 
 ## 10. Scripts and result files (run from the repository root)
 
@@ -202,11 +225,16 @@ Masks exist only for the main dataset, so these models cannot be used in the app
 | Lung masks | `model/experiments/check_masks.py`, `mask_eval_notrain.py`, `train_masked.py`, `mask_silhouette_test.py` |
 | Seed variability | `model/experiments/train_seeds.py` |
 | Training curves | `analysis/plot_curves.py` |
+| Validation predictions (for threshold tuning) | `model/experiments/predict_val.py` |
+| Explanation assistant and its test | `model/explain.py`, `model/tests/test_explain_llm.py` |
+| Demo images | `model/tests/make_demo_images.py` |
 
 Result files: `analysis/model_comparison_test.csv`, `analysis/external_generalization.csv`, `analysis/external_clean_generalization.csv`, `analysis/mask_eval_notrain.csv`, `analysis/mask_trained_eval.csv`, `analysis/seed_runs.csv`. Prediction CSVs are in `data/predictions/` (not in GitHub; shared through Drive). Seed checkpoints are in `model/checkpoints/seeds/` (not in GitHub).
 
 ## 11. Open items
 
-- Final model choice: waiting for Member 3's statistical comparison. EfficientNet-B0 stays provisional.
-- Final urgency_score rule and decision threshold: Member 3.
-- Store `warnings` in the worklist: suggested to Member 2.
+- Final model: no significant difference between the three models, so EfficientNet-B0 stays (lightest). Do not replace the checkpoint after the threshold was tuned.
+- Re-tune the worklist threshold on validation predictions instead of the test half (Member 3; `predict_val.py` provides the data).
+- Confirm exactly which quantity the 0.18 threshold applies to (urgency score or 1 - P(Normal)); they are close but not identical (Member 3).
+- Decide on an aging rule or state starvation as a limitation (Member 3 and Member 2).
+- `warnings` are stored in the worklist and `review_started_at` is exported (done by Member 2).
