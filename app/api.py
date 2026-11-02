@@ -17,7 +17,8 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel
 
 import db
-from inference import InvalidImageError, analyze, load_image
+from inference import (InvalidImageError, analyze, ask_result, explain_result, load_image,
+                       result_from_case)
 
 app = FastAPI(
     title="Chest X-ray Worklist API",
@@ -31,6 +32,10 @@ _model_lock = threading.Lock()   # the model / Grad-CAM is not safe for parallel
 
 class DoneRequest(BaseModel):
     radiologist_label: str | None = None
+
+
+class AskRequest(BaseModel):
+    question: str
 
 
 def _case_or_404(case_id):
@@ -80,6 +85,10 @@ async def analyze_image(file: UploadFile = File(...),
         "warnings": res["warnings"],
         "case_id": None,
     }
+    try:
+        out["explanation"] = explain_result(res)
+    except Exception:
+        out["explanation"] = None
     if save:
         out["case_id"] = db.save_case(image, res)
     return out
@@ -112,6 +121,22 @@ def get_image(case_id: int):
 @app.get("/cases/{case_id}/heatmap")
 def get_heatmap(case_id: int):
     return FileResponse(_case_or_404(case_id)["heatmap_path"], media_type="image/png")
+
+
+@app.get("/cases/{case_id}/explain")
+def explain_case(case_id: int):
+    """Plain-language explanation of the stored AI result (not a diagnosis)."""
+    return {"case_id": case_id,
+            "explanation": explain_result(result_from_case(_case_or_404(case_id)))}
+
+
+@app.post("/cases/{case_id}/ask")
+def ask_case(case_id: int, body: AskRequest):
+    """Question about the stored AI result. Diagnosis/treatment questions are refused."""
+    if not body.question.strip():
+        raise HTTPException(400, "Question is empty")
+    out = ask_result(result_from_case(_case_or_404(case_id)), body.question)
+    return {"case_id": case_id, **out}
 
 
 def _move(case_id, status, label=None):

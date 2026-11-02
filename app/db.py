@@ -37,7 +37,8 @@ ALLOWED_MOVES = {               # status flow: pending -> in_review -> done
 }
 
 EXPORT_COLUMNS = ["case_id", "uploaded_at", "review_started_at", "read_at",
-                  "predicted_class", "urgency_score", "status"]
+                  "predicted_class", "p_covid", "p_lung_opacity", "p_normal",
+                  "p_viral_pneumonia", "urgency_score", "status"]
 
 WARNING_SEP = "; "   # warnings from predict() are stored as one text, joined by this
 

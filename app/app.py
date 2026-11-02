@@ -9,7 +9,8 @@ import pandas as pd
 import streamlit as st
 
 import db
-from inference import InvalidImageError, analyze, load_image
+from inference import (InvalidImageError, analyze, ask_result, explain_result, load_image,
+                       result_from_case)
 
 st.set_page_config(page_title="Chest X-ray Assistant", page_icon="🩻", layout="wide")
 db.init_db()
@@ -63,6 +64,39 @@ def case_table(rows, with_position=True):
     if with_position:
         df.insert(0, "#", range(1, len(df) + 1))
     return df
+
+
+EXAMPLE_QUESTIONS = ["Why this result?", "How sure is the model?", "What does the heat map show?",
+                     "What are the model's limits?"]
+
+
+def explanation_box(res, key):
+    """AI explanation of one result + questions about it (model/explain.py)."""
+    with st.container(border=True):
+        st.markdown("#### 🤖 AI explanation")
+        try:
+            st.write(explain_result(res))
+        except Exception as e:                       # never break the page
+            st.error(f"Explanation not available: {e}")
+            return
+        st.caption("Ask about this result. The assistant explains the model output only; it does "
+                   "not diagnose or advise on treatment.")
+        cols = st.columns(len(EXAMPLE_QUESTIONS))
+        for col, q in zip(cols, EXAMPLE_QUESTIONS):
+            if col.button(q, key=f"{key}-{q}"):
+                st.session_state[f"{key}-q"] = q
+        q = st.text_input("Your question", key=f"{key}-q",
+                          placeholder="e.g. What is the second most likely class?")
+        if q:
+            try:
+                out = ask_result(res, q)
+                if out["source"] == "refused":
+                    st.warning(out["answer"])
+                else:
+                    st.info(out["answer"])
+                st.caption(f"Answer source: {out['source']}")
+            except Exception as e:
+                st.error(f"Could not answer: {e}")
 
 
 TABLE_CONFIG = {
@@ -174,6 +208,7 @@ elif page == "Upload & Analyze":
             m3.metric("Model", res["model_name"])
             probs = pd.Series({show(c): p for c, p in res["probabilities"].items()})
             st.bar_chart(probs, horizontal=True, x_label="probability", y_label="")
+            explanation_box(res, key=f"up-{key}")
 
             if st.session_state["saved"]:
                 st.success(f"Saved as case #{st.session_state['saved']}. "
@@ -242,6 +277,8 @@ elif page == "Worklist":
                  f"**Model:** {row['model_name'] or 'unknown'}")
         for w in db.warnings_list(row):
             st.warning(f"⚠️ Image check: {w} The case keeps its priority; please check the image.")
+        with st.expander("🤖 Explain this result"):
+            explanation_box(result_from_case(row), key=f"case-{row['case_id']}")
 
         try:
             if row["status"] == "pending":

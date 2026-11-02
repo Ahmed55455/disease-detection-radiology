@@ -106,6 +106,13 @@ def main():
     lines = db.export_csv(tmp / "worklist.csv").strip().splitlines()
     assert lines[0] == ",".join(db.EXPORT_COLUMNS)
     assert "review_started_at" in lines[0]
+    # The 4 probabilities are exported, so Member 3 can recompute urgency_score
+    import csv as _csv, io as _io
+    rec = list(_csv.DictReader(_io.StringIO("\n".join(lines))))
+    for r in rec:
+        probs = {cls: float(r[col]) for cls, col in db.PROB_COLUMNS.items()}
+        assert abs(sum(probs.values()) - 1) < 1e-6
+        assert abs(db.urgency_score(probs) - float(r["urgency_score"])) < 1e-4
     assert len(lines) == 1 + 3                  # header + all 3 cases (done included)
     print("OK  export_csv:", lines[0])
 
@@ -125,6 +132,14 @@ def main():
     expect_error(load_image, "x.png", png_bytes((20, 20)))               # too small
     expect_error(load_image, "x.png", b"0" * (10 * 1024 * 1024 + 1))     # > 10 MB
     print("OK  upload validation")
+
+    # 9) Explanation assistant on a stored case (template backend, offline)
+    from inference import ask_result, explain_result, result_from_case
+    res = result_from_case(db.get_case(a))
+    assert res["class"] == "Normal" and abs(sum(res["probabilities"].values()) - 1) < 1e-6
+    assert "Normal" in explain_result(res)
+    assert ask_result(res, "Do I have COVID?")["source"] == "refused"
+    print("OK  explanation assistant")
 
     print("\nAll tests passed.")
 

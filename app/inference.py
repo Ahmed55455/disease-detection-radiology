@@ -3,6 +3,7 @@
 No Streamlit here, so a FastAPI API can reuse it later.
 """
 import io
+import os
 import sys
 from pathlib import Path
 
@@ -53,3 +54,30 @@ def analyze(image):
     res.setdefault("model_name", "unknown")
     res.setdefault("warnings", [])
     return res
+
+
+# ---- Explanation assistant (Member 1's model/explain.py) -----------------------
+# "template" works offline everywhere. "ollama" needs Ollama on that computer.
+EXPLAIN_BACKEND = os.environ.get("EXPLAIN_BACKEND", "template")
+
+
+def result_from_case(case):
+    """Rebuild the predict()-style result of a stored case (no heatmap needed)."""
+    import db
+    probs = {cls: case[col] for cls, col in db.PROB_COLUMNS.items()}
+    return {"class": case["predicted_class"], "confidence": case["confidence"],
+            "probabilities": probs, "model_name": case.get("model_name") or "unknown",
+            "warnings": db.warnings_list(case)}
+
+
+def explain_result(res):
+    """Plain-language summary of one result (English)."""
+    from explain import explain
+    return explain(res)
+
+
+def ask_result(res, question):
+    """Answer a question about one result. Returns {"answer": str, "source": str}.
+    Diagnosis and treatment questions are refused by explain.py."""
+    from explain import ask
+    return ask(res, question, backend=EXPLAIN_BACKEND)

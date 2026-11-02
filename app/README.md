@@ -33,6 +33,15 @@ python app/test_db.py         # runs the tests
 - Empty, damaged or fake image files show a clear error message instead of crashing.
 - `predict()` warnings (for example a colored image, which may not be an X-ray) are shown to the user.
 
+## AI explanation (model/explain.py, Member 1)
+
+After a result is shown (Upload page, and "Explain this result" in the Worklist case view), the app
+shows a plain-language explanation and lets the user ask questions about that result. It uses only
+the output of `predict()` (no image, no patient data) and refuses diagnosis/treatment questions.
+Backend: environment variable `EXPLAIN_BACKEND` (default `template`, offline, works everywhere;
+`ollama` needs Ollama installed on that computer). API: `GET /cases/{id}/explain`,
+`POST /cases/{id}/ask` with `{"question": "..."}`.
+
 ## Worklist
 
 - AI order (default): `urgency_score` descending, ties by `uploaded_at` ascending (oldest first).
@@ -58,7 +67,9 @@ to update cases already stored.
 ## CSV export for the simulation (Member 3)
 
 Page **Export** -> **Download worklist.csv**, or in Python `db.export_csv("worklist.csv")`.
-Columns: `case_id, uploaded_at, review_started_at, read_at, predicted_class, urgency_score, status`.
+Columns: `case_id, uploaded_at, review_started_at, read_at, predicted_class, p_covid, p_lung_opacity,
+p_normal, p_viral_pneumonia, urgency_score, status`. The 4 probabilities let the simulation recompute
+`urgency_score` with the same rule and check that it matches the app.
 `review_started_at` = when the radiologist pressed Start review (empty if not started).
 All cases are included (also `done`, which have `read_at`).
 

@@ -63,6 +63,15 @@ def main():
     assert client.get("/compare").json()[0]["ai_position"] == 1
     print("OK  /cases, order, /compare, images, 404")
 
+    r = client.get(f"/cases/{case_id}/explain")
+    assert r.status_code == 200 and "COVID" in r.json()["explanation"]
+    r = client.post(f"/cases/{case_id}/ask", json={"question": "How sure is the model?"})
+    assert r.status_code == 200 and r.json()["source"] == "template" and r.json()["answer"]
+    r = client.post(f"/cases/{case_id}/ask", json={"question": "Should I take antibiotics?"})
+    assert r.json()["source"] == "refused"
+    assert client.post(f"/cases/{case_id}/ask", json={"question": " "}).status_code == 400
+    print("OK  /explain and /ask (template answer, diagnosis question refused)")
+
     assert client.post(f"/cases/{case_id}/done", json={}).status_code == 409   # must review first
     assert client.post(f"/cases/{case_id}/start_review").json()["status"] == "in_review"
     r = client.post(f"/cases/{case_id}/done", json={"radiologist_label": "COVID"})
